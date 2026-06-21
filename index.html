@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LEENAI RR 방사성물질 간이측정결과 툴 v1.0</title>
+<style>
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
+  --accent:#4f8ef7;--ok:#22c55e;--warn:#f59e0b;--error:#ef4444;--info:#38bdf8;
+  --text:#e2e8f0;--text2:#8892a4;--text3:#4a5568;
+}
+[data-theme="light"]{
+  --bg:#f0f2f5;--surface:#ffffff;--surface2:#f8f9fc;--border:#d1d5db;
+  --accent:#2563eb;--ok:#16a34a;--warn:#d97706;--error:#dc2626;--info:#0284c7;
+  --text:#111827;--text2:#6b7280;--text3:#9ca3af;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI','Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:13px;}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;}
+.logo{font-size:17px;font-weight:700;letter-spacing:1px;}.logo span{color:var(--accent);}
+.badge-sys{background:var(--accent);color:#fff;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;}
+.header-sub{color:var(--text2);font-size:11px;background:var(--surface2);padding:2px 8px;border-radius:4px;}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:8px;}
+.theme-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text2);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;}
+.theme-btn:hover{border-color:var(--accent);color:var(--text);}
+.user-badge{font-size:11px;color:var(--ok);background:rgba(34,197,94,.1);padding:3px 8px;border-radius:4px;display:none;}
+.main{max-width:960px;margin:0 auto;padding:20px 16px;display:flex;flex-direction:column;gap:14px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;transition:border-color .2s;}
+.card.active{border-color:var(--accent);}
+.card.done{border-color:var(--ok);opacity:.95;}
+.card-title{display:flex;align-items:center;gap:10px;padding:13px 18px;font-weight:600;font-size:13px;}
+.card-body{padding:14px 18px 18px;}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;}
+.badge-step{background:var(--border);color:var(--text2);}
+.card.active .badge-step{background:var(--accent);color:#fff;}
+.card.done .badge-step{background:var(--ok);color:#fff;}
+.form-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;}
+.form-group{display:flex;flex-direction:column;gap:4px;}
+.form-label{font-size:11px;color:var(--text2);font-weight:500;}
+input[type="date"],input[type="text"],select{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;font-size:12px;outline:none;}
+input[type="date"]:focus,input[type="text"]:focus,select:focus{border-color:var(--accent);}
+input[type="date"]{color-scheme:dark;}
+[data-theme="light"] input[type="date"]{color-scheme:light;}
+.btn{padding:7px 16px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:600;transition:opacity .15s;}
+.btn:hover{opacity:.85;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-ok{background:var(--ok);color:#fff;}
+.btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border);}
+.btn-sm{padding:4px 10px;font-size:11px;}
+.tbl{width:100%;border-collapse:collapse;font-size:12px;}
+.tbl th{background:var(--surface2);color:var(--text2);font-weight:600;padding:7px 10px;border-bottom:1px solid var(--border);text-align:left;}
+.tbl td{padding:7px 10px;border-bottom:1px solid var(--border);}
+.tbl tr:last-child td{border-bottom:none;}
+.tbl tr.selected td{background:rgba(79,142,247,.1);}
+.tbl tr:hover td{background:rgba(79,142,247,.05);cursor:pointer;}
+.info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;}
+.info-item{background:var(--surface2);border-radius:6px;padding:8px 12px;}
+.info-key{font-size:10px;color:var(--text2);margin-bottom:3px;}
+.info-val{font-size:13px;font-weight:600;color:var(--text);}
+.photo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px;}
+.photo-slot{background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.photo-slot.filled{border-color:var(--ok);}
+.photo-slot.empty{border-color:var(--warn);border-style:dashed;}
+.photo-slot-label{padding:6px 8px;font-size:10px;color:var(--text2);background:var(--surface);border-bottom:1px solid var(--border);}
+.photo-slot-label span{font-weight:700;color:var(--text);}
+.photo-slot-img{width:100%;height:120px;object-fit:cover;display:block;}
+.photo-slot-empty{height:120px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:20px;}
+.photo-slot-input{width:100%;border:none;background:transparent;color:var(--text);font-size:12px;font-weight:700;text-align:center;padding:5px;outline:none;}
+.photo-slot-input:focus{background:var(--surface2);}
+.photo-section-title{font-size:12px;font-weight:700;color:var(--text2);margin:14px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--border);}
+.result-panel{background:var(--surface2);border-radius:8px;padding:14px;margin-top:12px;}
+.result-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px;}
+.result-row:last-child{border-bottom:none;}
+.result-key{color:var(--text2);}
+.result-val{font-weight:700;}
+.result-val.ok{color:var(--ok);}
+.result-val.fail{color:var(--error);}
+.log-box{background:var(--surface2);border-radius:6px;padding:8px 12px;max-height:150px;overflow-y:auto;font-size:11px;font-family:monospace;margin-top:8px;}
+.log-ok{color:var(--ok);}
+.log-warn{color:var(--warn);}
+.log-err{color:var(--error);}
+.log-info{color:var(--info);}
+.loading-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999;align-items:center;justify-content:center;}
+.loading-overlay.show{display:flex;}
+.loading-box{background:var(--surface);border-radius:12px;padding:24px 36px;text-align:center;border:1px solid var(--border);}
+.spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-msg{font-size:13px;color:var(--text2);}
+.progress-bar{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin:8px 0;}
+.progress-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .3s;}
+.powered{text-align:center;font-size:10px;color:var(--text3);padding:18px 0 10px;letter-spacing:.4px;}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-box">
+    <div class="spinner"></div>
+    <div class="loading-msg" id="loadingMsg">처리 중...</div>
+  </div>
+</div>
+
+<header>
+  <div class="logo">LEEN<span>AI</span></div>
+  <div class="badge-sys">SYS-D-02</div>
+  <div class="header-sub">RR 방사성물질 간이측정결과 툴 v1.0</div>
+  <div class="header-right">
+    <span class="user-badge" id="userBadge"></span>
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ 라이트</button>
+  </div>
+</header>
+
+<div class="main">
+
+  <div class="card active" id="card1">
+    <div class="card-title"><span class="badge badge-step">STEP 1</span> COMPASS 로그인 (Dataverse)</div>
+    <div class="card-body">
+      <p style="color:var(--text2);font-size:12px;margin-bottom:12px;">Microsoft 365 계정으로 COMPASS에 로그인하세요.</p>
+      <button class="btn btn-primary" onclick="startLogin()">🔐 COMPASS 로그인</button>
+    </div>
+  </div>
+
+  <div class="card" id="card2">
+    <div class="card-title"><span class="badge badge-step">STEP 2</span> IV번호 선택 (KOREA향)</div>
+    <div class="card-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">CY CUT 시작일</label>
+          <input type="date" id="dateFrom">
+        </div>
+        <div class="form-group">
+          <label class="form-label">CY CUT 종료일</label>
+          <input type="date" id="dateTo">
+        </div>
+        <button class="btn btn-primary" onclick="fetchIVList()" id="fetchBtn">🔍 조회</button>
+      </div>
+      <div id="ivListArea" style="display:none;margin-top:12px;">
+        <table class="tbl" id="ivTable">
+          <thead><tr><th>IV번호(부킹ID)</th><th>선박명</th><th>선적항</th><th>CY CUT</th><th>선적일</th><th>입항항구</th><th>선적량(MT)</th></tr></thead>
+          <tbody id="ivTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="card3">
+    <div class="card-title"><span class="badge badge-step">STEP 3</span> 선적 정보 확인 및 보완 입력</div>
+    <div class="card-body">
+      <div class="info-grid" id="infoGrid">
+        <div class="info-item"><div class="info-key">수입업체명</div><div class="info-val" id="infoBuyer">—</div></div>
+        <div class="info-item"><div class="info-key">선박명</div><div class="info-val" id="infoVessel">—</div></div>
+        <div class="info-item"><div class="info-key">선적항(일본)</div><div class="info-val" id="infoPol">—</div></div>
+        <div class="info-item"><div class="info-key">선적일</div><div class="info-val" id="infoBlDate">—</div></div>
+        <div class="info-item"><div class="info-key">선적량(톤)</div><div class="info-val" id="infoNw">—</div></div>
+        <div class="info-item"><div class="info-key">입항항구(한국)</div><div class="info-val" id="infoPod">—</div></div>
+        <div class="info-item"><div class="info-key">폐기물품목</div><div class="info-val" id="infoItem">—</div></div>
+      </div>
+      <div class="form-row" style="margin-top:14px;">
+        <div class="form-group">
+          <label class="form-label">검사도구</label>
+          <select id="inspTool">
+            <option value="RANGER">RANGER</option>
+            <option value="RANGEN">RANGEN</option>
+            <option value="기타">기타</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">측정일자</label>
+          <input type="date" id="measDate">
+        </div>
+        <div class="form-group">
+          <label class="form-label">담당자</label>
+          <select id="staffSel">
+            <option value="SW PARK">SW PARK</option>
+            <option value="JUAH LEE">JUAH LEE</option>
+            <option value="Lee Myoung ho">Lee Myoung ho</option>
+            <option value="Miyu Oba">Miyu Oba</option>
+            <option value="Masayuki Takeuchi">Masayuki Takeuchi</option>
+            <option value="Kaixin Zhan">Kaixin Zhan</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="goToStep4()" style="margin-top:6px;">다음 →</button>
+    </div>
+  </div>
+
+  <div class="card" id="card4">
+    <div class="card-title"><span class="badge badge-step">STEP 4</span> 사진 폴더 선택 및 AI 분류</div>
+    <div class="card-body">
+      <div class="form-row" style="margin-bottom:10px;">
+        <div class="form-group">
+          <label class="form-label">API KEY</label>
+          <input type="text" id="apiKey" placeholder="sk-ant-..." style="width:260px;font-family:monospace;">
+        </div>
+      </div>
+      <p style="color:var(--text2);font-size:12px;margin-bottom:10px;">IV 폴더(또는 CT 폴더)를 선택하면 AI가 RR 측정 사진을 자동으로 찾아 분류합니다.</p>
+      <button class="btn btn-ghost" onclick="selectFolder()">📂 사진 폴더 선택</button>
+      <span id="folderName" style="margin-left:10px;font-size:12px;color:var(--text2);"></span>
+
+      <div id="scanArea" style="display:none;margin-top:14px;">
+        <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:6px;" id="progressLabel">스캔 대기 중...</div>
+        <div class="log-box" id="logBox"></div>
+      </div>
+
+      <div id="photoReview" style="display:none;margin-top:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="font-size:13px;font-weight:600;">📸 사진 배치 확인 (수치 수정 가능)</div>
+          <button class="btn btn-ok btn-sm" onclick="goToStep5()">PDF 생성 →</button>
+        </div>
+        <div class="photo-section-title">📍 배경 (10m이격) — 지점 1~4</div>
+        <div class="photo-grid" id="bgGrid"></div>
+        <div class="photo-section-title">📍 폐기물 (1m이격) — 지점 1~4</div>
+        <div class="photo-grid" id="m1Grid"></div>
+        <div class="photo-section-title">📍 폐기물 (표면) — 지점 1~4</div>
+        <div class="photo-grid" id="sfGrid"></div>
+        <div class="result-panel" id="calcPanel">
+          <div class="result-row"><span class="result-key">평균(a) 배경 10m이격</span><span class="result-val" id="avgA">—</span></div>
+          <div class="result-row"><span class="result-key">평균 폐기물 1m이격</span><span class="result-val" id="avgM1">—</span></div>
+          <div class="result-row"><span class="result-key">평균(b) 폐기물 표면</span><span class="result-val" id="avgB">—</span></div>
+          <div class="result-row"><span class="result-key">방사선 증가율 (b/a)</span><span class="result-val" id="ratio">—</span></div>
+          <div class="result-row"><span class="result-key">기준</span><span class="result-val">0.3</span></div>
+          <div class="result-row"><span class="result-key">판정</span><span class="result-val" id="verdict">—</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="card5">
+    <div class="card-title"><span class="badge badge-step">STEP 5</span> PDF 생성 · 다운로드</div>
+    <div class="card-body">
+      <p style="color:var(--text2);font-size:12px;margin-bottom:12px;">한국 방사성물질 간이측정결과 양식으로 PDF를 생성합니다.</p>
+      <button class="btn btn-ok" onclick="generatePDF()">📄 PDF 생성 · 다운로드</button>
+    </div>
+  </div>
+
+  <div class="powered">✦ Powered by LEENAI Automation System</div>
+</div>
+
+<script>
+const CLIENT_ID='f071a165-5e9b-44bf-b6a1-baba654524db';
+const TENANT_ID='a56988ff-c2b8-4df8-9727-889ad4205198';
+const DV_URL='https://orgde512c6f.crm7.dynamics.com';
+const DV_API=`${DV_URL}/api/data/v9.2`;
+const REDIRECT_URI='https://mhlee205.github.io/RADIATION-REPORT/';
+const SCOPE_DV=`${DV_URL}/user_impersonation openid profile email offline_access`;
+const EXPORTER_NAME='LEENEAR CORPORATION';
+const EXPORTER_ADDR='VORT SUIDOBASHI3 5FL, 2-8-11 KANDASARUGAKUCHO, CHIYODA, TOKYO, JAPAN, 101-0064';
+const ITEM_MAP={'JOCC':'WASTE PAPER JOCC','JONP':'WASTE PAPER JONP','JOMG':'WASTE PAPER JOMG'};
+const S={accessToken:null,tokenExpiry:0,refreshToken:null,userName:'',userEmail:'',selectedIV:null,
+  photos:{bg:[null,null,null,null],m1:[null,null,null,null],sf:[null,null,null,null]},
+  values:{bg:[null,null,null,null],m1:[null,null,null,null],sf:[null,null,null,null]}};
+
+(function(){const saved=localStorage.getItem('leenai_rr_theme')||'dark';document.documentElement.setAttribute('data-theme',saved);document.addEventListener('DOMContentLoaded',()=>updateThemeBtn(saved));})();
+function toggleTheme(){const cur=document.documentElement.getAttribute('data-theme');const next=cur==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',next);localStorage.setItem('leenai_rr_theme',next);updateThemeBtn(next);}
+function updateThemeBtn(t){const b=document.getElementById('themeBtn');if(b)b.textContent=t==='dark'?'☀️ 라이트':'🌙 다크';}
+function showLoading(msg='처리 중...'){document.getElementById('loadingOverlay').classList.add('show');document.getElementById('loadingMsg').textContent=msg;}
+function hideLoading(){document.getElementById('loadingOverlay').classList.remove('show');}
+
+function b64url(buf){return btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');}
+async function sha256(str){return crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));}
+function randomStr(len=64){const a=new Uint8Array(len);crypto.getRandomValues(a);return b64url(a).slice(0,len);}
+
+async function startLogin(){
+  const verifier=randomStr(64);const challenge=b64url(await sha256(verifier));const state=randomStr(16);
+  sessionStorage.setItem('pkce_v',verifier);sessionStorage.setItem('pkce_s',state);
+  const p=new URLSearchParams({client_id:CLIENT_ID,response_type:'code',redirect_uri:REDIRECT_URI,scope:SCOPE_DV,state,code_challenge:challenge,code_challenge_method:'S256',prompt:'select_account'});
+  location.href=`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/authorize?${p}`;
+}
+
+async function handleCallback(){
+  const p=new URLSearchParams(location.search);const code=p.get('code');if(!code)return;
+  history.replaceState({},'',location.pathname);
+  const verifier=sessionStorage.getItem('pkce_v');if(!verifier){alert('세션 만료. 다시 로그인하세요.');return;}
+  showLoading('인증 중...');
+  try{
+    const res=await fetch(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:CLIENT_ID,grant_type:'authorization_code',code,redirect_uri:REDIRECT_URI,code_verifier:verifier,scope:SCOPE_DV})});
+    const data=await res.json();if(!data.access_token)throw new Error(data.error_description||'토큰 취득 실패');
+    S.accessToken=data.access_token;S.refreshToken=data.refresh_token||null;S.tokenExpiry=Date.now()+(data.expires_in-60)*1000;
+    if(data.id_token){try{const pl=JSON.parse(atob(data.id_token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));S.userName=pl.name||'';S.userEmail=pl.email||pl.preferred_username||'';}catch(e){}}
+    hideLoading();onLoginSuccess();
+  }catch(e){hideLoading();alert('인증 오류: '+e.message);}
+}
+
+async function checkToken(){
+  if(S.accessToken&&Date.now()<S.tokenExpiry)return true;
+  if(!S.refreshToken){alert('토큰 만료. 다시 로그인하세요.');return false;}
+  try{
+    const res=await fetch(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:CLIENT_ID,grant_type:'refresh_token',refresh_token:S.refreshToken,scope:SCOPE_DV})});
+    const data=await res.json();if(!data.access_token)throw new Error('갱신 실패');
+    S.accessToken=data.access_token;S.tokenExpiry=Date.now()+(data.expires_in-60)*1000;if(data.refresh_token)S.refreshToken=data.refresh_token;return true;
+  }catch(e){alert('토큰 갱신 실패. 다시 로그인하세요.');return false;}
+}
+
+function onLoginSuccess(){
+  const ub=document.getElementById('userBadge');ub.textContent='✅ '+(S.userName||S.userEmail||'로그인됨');ub.style.display='inline-block';
+  document.getElementById('card1').classList.remove('active');document.getElementById('card1').classList.add('done');
+  document.getElementById('card2').classList.add('active');
+  const today=new Date();const m30=new Date(today);m30.setDate(today.getDate()-30);const p30=new Date(today);p30.setDate(today.getDate()+30);
+  document.getElementById('dateFrom').value=m30.toISOString().split('T')[0];document.getElementById('dateTo').value=p30.toISOString().split('T')[0];
+}
+
+async function dvGet(path){
+  if(!(await checkToken()))throw new Error('인증 필요');
+  const res=await fetch(`${DV_API}/${path}`,{headers:{'Authorization':'Bearer '+S.accessToken,'Accept':'application/json','OData-MaxVersion':'4.0','OData-Version':'4.0','Prefer':'odata.maxpagesize=500'}});
+  if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(`API 오류 ${res.status}: ${err?.error?.message||''}`);}
+  return res.json();
+}
+
+async function fetchIVList(){
+  const dateFrom=document.getElementById('dateFrom').value;const dateTo=document.getElementById('dateTo').value;
+  if(!dateFrom||!dateTo){alert('날짜를 입력하세요.');return;}
+  showLoading('COMPASS에서 KOREA향 부킹 조회 중...');
+  try{
+    const filter=`cr49f_cy_cut ge ${dateFrom}T00:00:00Z and cr49f_cy_cut le ${dateTo}T23:59:59Z`;
+    const bkgData=await dvGet(`cr49f_bookings?$filter=${encodeURIComponent(filter)}&$select=cr49f_bookingid,cr49f_main_ship_name,crcf9_bl_etd,cr49f_etd,cr49f_cy_cut,_cr49f_region_id_value,_cr49f_region_japan_id_value,_cr49f_sale_contract_id_value&$orderby=cr49f_cy_cut asc&$top=200`);
+    if(!bkgData.value?.length){hideLoading();alert('해당 기간에 부킹이 없습니다.');return;}
+    const regionIds=[...new Set(bkgData.value.map(b=>b._cr49f_region_id_value).filter(Boolean))];
+    const regionMap={};
+    for(const rid of regionIds){try{const r=await dvGet(`cr49f_regions(${rid})?$select=cr49f_pod,cr49f_region`);regionMap[rid]=r;}catch(e){regionMap[rid]={cr49f_pod:'',cr49f_region:''};}}
+    const polIds=[...new Set(bkgData.value.map(b=>b._cr49f_region_japan_id_value).filter(Boolean))];
+    const polMap={};
+    for(const pid of polIds){try{const r=await dvGet(`crcf9_region_japans(${pid})?$select=crcf9_pol`);polMap[pid]=r;}catch(e){polMap[pid]={crcf9_pol:''};}}
+    const koreaBkgs=bkgData.value.filter(b=>{const reg=regionMap[b._cr49f_region_id_value];if(!reg)return false;const region=(reg.cr49f_region||'').toUpperCase();const pod=(reg.cr49f_pod||'').toUpperCase();return region.includes('KOREA')||pod.includes('KOREA')||pod.includes('INCHEON')||pod.includes('KWANGYANG')||pod.includes('BUSAN')||pod.includes('GWANGYANG');});
+    hideLoading();
+    renderIVTable(koreaBkgs.length?koreaBkgs:bkgData.value,regionMap,polMap);
+    if(!koreaBkgs.length)alert('KOREA향 필터 결과 없음 — 전체 부킹을 표시합니다.');
+  }catch(e){hideLoading();alert('조회 오류: '+e.message);console.error(e);}
+}
+
+function renderIVTable(bkgs,regionMap,polMap){
+  const tbody=document.getElementById('ivTableBody');tbody.innerHTML='';
+  bkgs.forEach(b=>{
+    const reg=regionMap[b._cr49f_region_id_value]||{};const pol=polMap[b._cr49f_region_japan_id_value]||{};
+    const cut=b.cr49f_cy_cut?b.cr49f_cy_cut.split('T')[0]:'—';const bldt=b.crcf9_bl_etd?b.crcf9_bl_etd.split('T')[0]:(b.cr49f_etd?b.cr49f_etd.split('T')[0]:'—');
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${b.cr49f_bookingid.slice(0,8)}...</td><td>${b.cr49f_main_ship_name||'—'}</td><td>${pol.crcf9_pol||'—'}</td><td>${cut}</td><td>${bldt}</td><td>${reg.cr49f_pod||'—'}</td><td>—</td>`;
+    tr.onclick=()=>selectIV(b,reg,pol,tr);tbody.appendChild(tr);
+  });
+  document.getElementById('ivListArea').style.display='block';
+}
+
+async function selectIV(bkg,reg,pol,tr){
+  document.querySelectorAll('#ivTableBody tr').forEach(r=>r.classList.remove('selected'));tr.classList.add('selected');
+  showLoading('선택 IV 상세 정보 취득 중...');
+  try{
+    const ctData=await dvGet(`crcf9_container_informations?$filter=_crcf9_booking_id_value eq ${bkg.cr49f_bookingid}&$select=cr49f_net_weight,cr49f_item&$top=50`);
+    let totalNw=0;let itemCodes=new Set();
+    (ctData.value||[]).forEach(ct=>{totalNw+=(ct.cr49f_net_weight||0);if(ct.cr49f_item)itemCodes.add(ct.cr49f_item);});
+    let buyerName='—';
+    if(bkg._cr49f_sale_contract_id_value){try{const sc=await dvGet(`cr49f_sale_contracts(${bkg._cr49f_sale_contract_id_value})?$select=_cr49f_buyer_id_value`);if(sc._cr49f_buyer_id_value){const buyer=await dvGet(`cr49f_buyers(${sc._cr49f_buyer_id_value})?$select=cr49f_buyer_name`);buyerName=buyer.cr49f_buyer_name||'—';}}catch(e){}}
+    const blDate=bkg.crcf9_bl_etd?bkg.crcf9_bl_etd.split('T')[0]:(bkg.cr49f_etd?bkg.cr49f_etd.split('T')[0]:'—');
+    S.selectedIV={bookingId:bkg.cr49f_bookingid,vessel:bkg.cr49f_main_ship_name||'—',pol:pol.crcf9_pol||'—',blDate,nwMT:(totalNw/1000).toFixed(2),pod:reg.cr49f_pod||'—',item:[...itemCodes].map(c=>ITEM_MAP[c]||c).join(', ')||'—',buyer:buyerName};
+    document.getElementById('infoBuyer').textContent=S.selectedIV.buyer;document.getElementById('infoVessel').textContent=S.selectedIV.vessel;document.getElementById('infoPol').textContent=S.selectedIV.pol;document.getElementById('infoBlDate').textContent=S.selectedIV.blDate;document.getElementById('infoNw').textContent=S.selectedIV.nwMT+' MT';document.getElementById('infoPod').textContent=S.selectedIV.pod;document.getElementById('infoItem').textContent=S.selectedIV.item;
+    document.getElementById('measDate').value=new Date().toISOString().split('T')[0];
+    hideLoading();document.getElementById('card3').classList.add('active');document.getElementById('card3').scrollIntoView({behavior:'smooth'});
+  }catch(e){hideLoading();alert('상세 정보 취득 오류: '+e.message);}
+}
+
+function goToStep4(){document.getElementById('card3').classList.remove('active');document.getElementById('card3').classList.add('done');document.getElementById('card4').classList.add('active');document.getElementById('card4').scrollIntoView({behavior:'smooth'});}
+
+let allFiles=[];
+async function selectFolder(){
+  try{
+    const dirHandle=await window.showDirectoryPicker({mode:'read'});
+    document.getElementById('folderName').textContent='📁 '+dirHandle.name;
+    document.getElementById('scanArea').style.display='block';document.getElementById('photoReview').style.display='none';
+    allFiles=[];log('폴더 스캔 중...','info');await collectFiles(dirHandle,'');log(`총 ${allFiles.length}개 이미지 파일 발견`,'ok');
+    await runAI();
+  }catch(e){if(e.name!=='AbortError')alert('폴더 선택 오류: '+e.message);}
+}
+
+async function collectFiles(dirHandle,path){
+  for await(const [name,handle] of dirHandle.entries()){
+    if(handle.kind==='file'){if(/\.(jpe?g|png|gif|bmp|webp)$/i.test(name)){const file=await handle.getFile();allFiles.push({name,path:path+'/'+name,file});}}
+    else if(handle.kind==='directory'){await collectFiles(handle,path+'/'+name);}
+  }
+}
+
+function log(msg,type='info'){const box=document.getElementById('logBox');const div=document.createElement('div');div.className='log-'+type;div.textContent='['+new Date().toLocaleTimeString()+'] '+msg;box.appendChild(div);box.scrollTop=box.scrollHeight;}
+function setProgress(pct,label){document.getElementById('progressFill').style.width=pct+'%';document.getElementById('progressLabel').textContent=label;}
+
+async function runAI(){
+  const apiKey=document.getElementById('apiKey').value.trim();if(!apiKey){alert('API KEY를 입력하세요.');return;}
+  const total=allFiles.length;if(!total){alert('이미지 파일이 없습니다.');return;}
+  log('AI 분류 시작...','info');setProgress(0,`0 / ${total} 처리 중`);
+  const rrFiles=[];
+  for(let i=0;i<total;i++){
+    const f=allFiles[i];setProgress(Math.round((i+1)/total*50),`[1단계] ${i+1}/${total} — RR 판별: ${f.name}`);
+    try{const b64=await fileToB64(f.file);const isRR=await checkIsRR(b64,apiKey);if(isRR){rrFiles.push({...f,b64});log(`✅ RR 사진: ${f.name}`,'ok');}else{log(`— 제외: ${f.name}`,'info');}}
+    catch(e){log(`⚠️ 판별 실패: ${f.name} — ${e.message}`,'warn');}
+  }
+  log(`RR 사진 ${rrFiles.length}장 발견`,'ok');if(!rrFiles.length){alert('RR 측정 사진을 찾을 수 없습니다.');return;}
+  const classified={bg:[],m1:[],sf:[]};
+  for(let i=0;i<rrFiles.length;i++){
+    const f=rrFiles[i];setProgress(50+Math.round((i+1)/rrFiles.length*50),`[2단계] ${i+1}/${rrFiles.length} — 분류: ${f.name}`);
+    try{const result=await classifyRR(f.b64,apiKey);log(`  → ${result.type}: ${result.value} μSv/h (${f.name})`,'ok');if(result.type==='background')classified.bg.push({...f,value:result.value});else if(result.type==='waste_1m')classified.m1.push({...f,value:result.value});else if(result.type==='surface')classified.sf.push({...f,value:result.value});}
+    catch(e){log(`⚠️ 분류 실패: ${f.name} — ${e.message}`,'warn');}
+  }
+  setProgress(100,'완료!');log(`배경 ${classified.bg.length}장, 1m이격 ${classified.m1.length}장, 표면 ${classified.sf.length}장`,'ok');
+  for(let i=0;i<4;i++){S.photos.bg[i]=classified.bg[i]||null;S.photos.m1[i]=classified.m1[i]||null;S.photos.sf[i]=classified.sf[i]||null;S.values.bg[i]=classified.bg[i]?.value??null;S.values.m1[i]=classified.m1[i]?.value??null;S.values.sf[i]=classified.sf[i]?.value??null;}
+  renderPhotoReview();document.getElementById('photoReview').style.display='block';document.getElementById('photoReview').scrollIntoView({behavior:'smooth'});
+}
+
+async function fileToB64(file){return new Promise((res,rej)=>{const reader=new FileReader();reader.onload=e=>res(e.target.result.split(',')[1]);reader.onerror=rej;reader.readAsDataURL(file);});}
+
+async function callClaude(messages,apiKey,maxTokens=200){
+  const response=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTokens,messages})});
+  if(!response.ok){const err=await response.json().catch(()=>({}));throw new Error(`Claude API 오류 ${response.status}: ${err?.error?.message||''}`);}
+  const data=await response.json();return data.content[0]?.text?.trim()||'';
+}
+
+async function checkIsRR(b64,apiKey){
+  const text=await callClaude([{role:'user',content:[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},{type:'text',text:'この写真が放射線測定写真かどうか判定してください。放射線測定器(RANGER, RANGENなどのデジタルLCD機器)が写っており、μSv/hの数値がLCDに表示されているものが対象です。YES または NO のみ答えてください。'}]}],apiKey,10);
+  return text.toUpperCase().includes('YES');
+}
+
+async function classifyRR(b64,apiKey){
+  const text=await callClaude([{role:'user',content:[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},{type:'text',text:'この放射線測定写真を分類し数値を読み取ってください。\n分類基準:\n- background: 廃棄物から10m以上離れた背景での測定\n- waste_1m: 廃棄物から1m離れての測定\n- surface: 廃棄物表面に密着しての測定\nLCDのμSv/h数値を読み取ってください。\nJSON形式のみで返答: {"type":"background|waste_1m|surface","value":0.00}'}]}],apiKey,60);
+  const match=text.match(/\{[\s\S]*\}/);if(!match)throw new Error('JSON 파싱 실패: '+text);return JSON.parse(match[0]);
+}
+
+function renderPhotoReview(){renderGrid('bgGrid',S.photos.bg,S.values.bg,'배경(10m이격)','bg');renderGrid('m1Grid',S.photos.m1,S.values.m1,'폐기물(1m이격)','m1');renderGrid('sfGrid',S.photos.sf,S.values.sf,'폐기물(표면)','sf');calcResults();}
+
+function renderGrid(gridId,photos,values,label,key){
+  const grid=document.getElementById(gridId);grid.innerHTML='';
+  for(let i=0;i<4;i++){
+    const slot=document.createElement('div');const filled=photos[i]!==null;slot.className='photo-slot '+(filled?'filled':'empty');
+    const imgHtml=filled?`<img class="photo-slot-img" src="data:image/jpeg;base64,${photos[i].b64}" alt="">`:`<div class="photo-slot-empty">📷</div>`;
+    const val=values[i]!==null?values[i]:'';
+    slot.innerHTML=`<div class="photo-slot-label"><span>${label} ${i+1}</span></div>${imgHtml}<div style="background:var(--surface);padding:4px;"><input class="photo-slot-input" type="number" step="0.01" min="0" value="${val}" placeholder="수치 입력" onchange="updateValue('${key}',${i},this.value)" id="val_${key}_${i}"><div style="font-size:10px;text-align:center;color:var(--text2);">μSv/h</div></div>`;
+    grid.appendChild(slot);
+  }
+}
+
+function updateValue(key,idx,val){S.values[key][idx]=val===''?null:parseFloat(val);calcResults();}
+
+function calcResults(){
+  const avg=arr=>{const v=arr.filter(x=>x!==null&&!isNaN(x));return v.length?(v.reduce((a,b)=>a+b,0)/v.length):null;};
+  const fmtN=v=>v===null?'—':v.toFixed(4)+' μSv/h';
+  const a=avg(S.values.bg);const m=avg(S.values.m1);const b=avg(S.values.sf);const ratio=(a&&b)?b/a:null;const verdict=ratio===null?'—':ratio<=0.3?'합격':'불합격';
+  document.getElementById('avgA').textContent=fmtN(a);document.getElementById('avgM1').textContent=fmtN(m);document.getElementById('avgB').textContent=fmtN(b);document.getElementById('ratio').textContent=ratio===null?'—':ratio.toFixed(9);
+  const vEl=document.getElementById('verdict');vEl.textContent=verdict;vEl.className='result-val '+(verdict==='합격'?'ok':verdict==='불합격'?'fail':'');
+}
+
+function goToStep5(){document.getElementById('card4').classList.remove('active');document.getElementById('card4').classList.add('done');document.getElementById('card5').classList.add('active');document.getElementById('card5').scrollIntoView({behavior:'smooth'});}
+
+async function generatePDF(){
+  showLoading('PDF 생성 중...');
+  try{
+    if(!window.jspdf)await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    const {jsPDF}=window.jspdf;const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    const iv=S.selectedIV||{};const tool=document.getElementById('inspTool').value;const meas=document.getElementById('measDate').value;const staff=document.getElementById('staffSel').value;
+    const avg=arr=>{const v=arr.filter(x=>x!==null&&!isNaN(x));return v.length?(v.reduce((a,b)=>a+b,0)/v.length):null;};
+    const fmtV=v=>v===null?'':v.toFixed(2);
+    const avgA=avg(S.values.bg);const avgB=avg(S.values.sf);const avgM1=avg(S.values.m1);const ratio=(avgA&&avgB)?avgB/avgA:null;const verdict=ratio===null?'':ratio<=0.3?'합격':'불합격';
+    doc.setFont('helvetica');doc.setFontSize(14);doc.setFont(undefined,'bold');doc.text('방사성물질 간이측정결과',105,18,{align:'center'});
+    const drawTable=(headers,rows,y,colWidths)=>{
+      let x=10;doc.setFillColor(230,235,245);doc.setFont(undefined,'bold');
+      headers.forEach((h,i)=>{doc.rect(x,y,colWidths[i],7,'FD');doc.text(h,x+colWidths[i]/2,y+4.5,{align:'center'});x+=colWidths[i];});
+      doc.setFont(undefined,'normal');let ry=y+7;
+      rows.forEach(row=>{x=10;doc.setFillColor(255,255,255);row.forEach((cell,i)=>{doc.rect(x,ry,colWidths[i],8);doc.text(String(cell||''),x+2,ry+5,{maxWidth:colWidths[i]-4});x+=colWidths[i];});ry+=8;});return ry;
+    };
+    let y=25;doc.setFontSize(8);
+    y=drawTable(['수입업체명','수출업체명','수출업체 주소','폐기물 품목'],[[iv.buyer||'',EXPORTER_NAME,EXPORTER_ADDR,iv.item||'']],y,[40,40,80,30]);
+    y=drawTable(['선박명','선적항(일본)','선적일','선적량(톤)','입항항구(한국)'],[[iv.vessel||'',iv.pol||'',iv.blDate||'',iv.nwMT||'',iv.pod||'']],y+2,[38,30,30,22,70]);
+    y=drawTable(['검사도구','측정일자','기준','방사선 증가율(b/a)','판정'],[[tool,meas,'0.3',ratio?ratio.toFixed(9):'',verdict]],y+2,[30,30,15,60,55]);
+    y=drawTable(['배경(폐기물로부터 10M 이상 이격) 측정결과(μSv/h)','','','',''],
+      [['지점 1','지점 2','지점 3','지점 4','평균(a)'],[fmtV(S.values.bg[0]),fmtV(S.values.bg[1]),fmtV(S.values.bg[2]),fmtV(S.values.bg[3]),fmtV(avgA)]],y+2,[38,38,38,38,38]);
+    y=drawTable(['폐기물(1M 이격) 측정결과(μSv/h)','','','',''],
+      [['지점 1','지점 2','지점 3','지점 4','평균'],[fmtV(S.values.m1[0]),fmtV(S.values.m1[1]),fmtV(S.values.m1[2]),fmtV(S.values.m1[3]),fmtV(avgM1)]],y+2,[38,38,38,38,38]);
+    y=drawTable(['폐기물(표면) 측정결과(μSv/h)','','','',''],
+      [['지점 1','지점 2','지점 3','지점 4','평균(b)'],[fmtV(S.values.sf[0]),fmtV(S.values.sf[1]),fmtV(S.values.sf[2]),fmtV(S.values.sf[3]),fmtV(avgB)]],y+2,[38,38,38,38,38]);
+    y+=4;doc.setFont(undefined,'bold');doc.text('측정업체:',10,y+5);doc.setFont(undefined,'normal');doc.text(EXPORTER_NAME,40,y+5);doc.text('담당자:',110,y+5);doc.text(staff,130,y+5);doc.text('(印)',175,y+5);doc.rect(10,y,190,10);
+    doc.setFontSize(7);doc.setTextColor(150);doc.text('✦ Powered by LEENAI Automation System',105,292,{align:'center'});doc.setTextColor(0);
+    doc.addPage();doc.setFontSize(9);doc.setFont(undefined,'bold');doc.text('<측정 사진>',10,12);doc.setFont(undefined,'normal');
+    await addPhotoPage(doc,14,['배경(10m이격)1','배경(10m이격)2','배경(10m이격)3','배경(10m이격)4'],S.photos.bg,S.values.bg);
+    await addPhotoPage(doc,100,['폐기물(1m이격)1','폐기물(1m이격)2','폐기물(1m이격)3','폐기물(1m이격)4'],S.photos.m1,S.values.m1);
+    doc.setFontSize(7);doc.setTextColor(150);doc.text('✦ Powered by LEENAI Automation System',105,292,{align:'center'});doc.setTextColor(0);
+    doc.addPage();doc.setFontSize(9);doc.setFont(undefined,'bold');doc.text('<측정 사진 (표면)>',10,12);doc.setFont(undefined,'normal');
+    await addPhotoPage(doc,14,['폐기물(표면)1','폐기물(표면)2','폐기물(표면)3','폐기물(표면)4'],S.photos.sf,S.values.sf);
+    doc.setFontSize(7);doc.setFont(undefined,'bold');doc.text('【방사능물질 간이측정결과 안내】',10,165);doc.setFont(undefined,'normal');
+    ['◆수출업체','1. 폐기물의 한국 수출 시 방사성물질 간이측정결과는 반드시 본 양식에 따라 작성할 것','2. 사진은 촬영 일시 확인이 가능해야 함','3. 배경/폐기물(1m이격)/폐기물(표면)의 측정방향은 각 지점별로 동일하여야 함','◆수입업체','1. 방사성물질 간이측정결과는 수출입폐기물포털시스템에 통관 시마다 제출'].forEach((line,i)=>{doc.text(line,10,172+(i*5));});
+    doc.setFontSize(7);doc.setTextColor(150);doc.text('✦ Powered by LEENAI Automation System',105,292,{align:'center'});doc.setTextColor(0);
+    doc.save(`RR_${iv.buyer||'REPORT'}_${meas||'nodate'}.pdf`);hideLoading();
+  }catch(e){hideLoading();alert('PDF 생성 오류: '+e.message);console.error(e);}
+}
+
+async function addPhotoPage(doc,startY,labels,photos,values){
+  const colW=46,colH=55,labelH=10;
+  for(let i=0;i<4;i++){
+    const x=10+i*(colW+1),y=startY;
+    doc.setFontSize(7);doc.setFont(undefined,'bold');doc.rect(x,y,colW,labelH);doc.text(labels[i],x+colW/2,y+4,{align:'center'});
+    const valStr=values[i]!==null?`<측정값: ${values[i]} μSv/h>`:'<측정값: —>';doc.setFont(undefined,'normal');doc.text(valStr,x+colW/2,y+8.5,{align:'center'});
+    if(photos[i]?.b64){try{doc.addImage('data:image/jpeg;base64,'+photos[i].b64,'JPEG',x,y+labelH,colW,colH);}catch(e){doc.rect(x,y+labelH,colW,colH);}}
+    else{doc.rect(x,y+labelH,colW,colH);doc.setTextColor(180);doc.text('No Photo',x+colW/2,y+labelH+colH/2,{align:'center'});doc.setTextColor(0);}
+  }
+}
+
+function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
+
+window.addEventListener('load',handleCallback);
+</script>
+</body>
+</html>
