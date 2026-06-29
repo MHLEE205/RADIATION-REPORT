@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v2.1</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v2.2</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -113,7 +113,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v2.1</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v2.2</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -314,7 +314,7 @@ async function startLogin(){
   const verifier=randomStr(64);const challenge=b64url(await sha256(verifier));const state=randomStr(16);
   sessionStorage.setItem('pkce_v',verifier);sessionStorage.setItem('pkce_s',state);
   const p=new URLSearchParams({client_id:CLIENT_ID,response_type:'code',redirect_uri:REDIRECT_URI,scope:SCOPE_DV,state,code_challenge:challenge,code_challenge_method:'S256',prompt:'select_account'});
-  location.href=`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.1/authorize?${p}`;
+  location.href=`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/authorize?${p}`;
 }
 
 async function handleCallback(){
@@ -323,7 +323,7 @@ async function handleCallback(){
   const verifier=sessionStorage.getItem('pkce_v');if(!verifier){alert('セッション期限切れ。再ログインしてください。');return;}
   showLoading('認証中...');
   try{
-    const res=await fetch(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.1/token`,{
+    const res=await fetch(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`,{
       method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
       body:new URLSearchParams({client_id:CLIENT_ID,grant_type:'authorization_code',code,redirect_uri:REDIRECT_URI,code_verifier:verifier,scope:SCOPE_DV})
     });
@@ -338,7 +338,7 @@ async function checkToken(){
   if(S.accessToken&&Date.now()<S.tokenExpiry)return true;
   if(!S.refreshToken){alert('トークン期限切れ。再ログインしてください。');return false;}
   try{
-    const res=await fetch(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.1/token`,{
+    const res=await fetch(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`,{
       method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
       body:new URLSearchParams({client_id:CLIENT_ID,grant_type:'refresh_token',refresh_token:S.refreshToken,scope:SCOPE_DV})
     });
