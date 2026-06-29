@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v1.8</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v1.9</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -91,6 +91,14 @@ input[type="date"]{color-scheme:dark;}
 .progress-bar{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin:8px 0;}
 .progress-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .3s;}
 .powered{text-align:center;font-size:10px;color:var(--text3);padding:18px 0 10px;letter-spacing:.4px;}
+.set-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px;}
+.set-card{background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;overflow:hidden;transition:border-color .2s;}
+.set-card:hover{border-color:var(--accent);}
+.set-card.selected{border-color:var(--ok);background:rgba(34,197,94,.06);}
+.set-card-header{padding:8px 10px;font-size:11px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
+.set-thumb-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:4px;}
+.set-thumb{width:100%;aspect-ratio:1;object-fit:cover;border-radius:2px;background:var(--border);}
+.set-count{font-size:10px;color:var(--text2);padding:4px 10px 6px;}
 </style>
 </head>
 <body>
@@ -105,7 +113,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v1.8</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v1.9</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -214,6 +222,16 @@ input[type="date"]{color-scheme:dark;}
         <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
         <div style="font-size:11px;color:var(--text2);margin-bottom:6px;" id="progressLabel">スキャン待機中...</div>
         <div class="log-box" id="logBox"></div>
+        <div id="setSelectArea" style="display:none;margin-top:14px;">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px;">
+            📋 撮影セット選択
+            <span style="font-size:11px;color:var(--text2);font-weight:400;">— サムネイルを確認してセットを選んでください</span>
+          </div>
+          <div class="set-grid" id="setGrid"></div>
+          <div style="margin-top:12px;text-align:right;">
+            <button class="btn btn-primary" id="runAiBtn" onclick="runAIOnSelectedSet()" disabled>🤖 選択したセットをAI分類</button>
+          </div>
+        </div>
       </div>
 
       <div id="photoReview" style="display:none;margin-top:16px;">
@@ -495,10 +513,111 @@ function goToStep4(){
   document.getElementById('card4').classList.add('active');document.getElementById('card4').scrollIntoView({behavior:'smooth'});
 }
 
-// ── STEP 4: 写真フォルダ選択・AI分類 ──
+// ── STEP 4: 写真フォルダ選択・セット選択・AI分類 ──
 let allFiles=[];
+let photoSets=[];
+let selectedSetId=null;
 
+function onFolderSelected(input){
+  const files=Array.from(input.files);
+  if(!files.length)return;
+  const photoFolderName=files[0].webkitRelativePath.split('/')[0];
+  const ivNo=S.selectedIV?.ivNo||'';
+  allFiles=[];
+  for(const f of files){
+    if(!/\.(jpe?g|png|gif|bmp|webp)$/i.test(f.name))continue;
+    const parts=f.webkitRelativePath.split('/');
+    const ivFolder=parts[1]||'';
+    const hasRR=parts.some(p=>p==='_RR'||p==='RR');
+    if(ivNo && ivFolder===ivNo && hasRR) allFiles.push({name:f.name,path:f.webkitRelativePath,file:f});
+  }
+  const ivFolders=[...new Set(Array.from(files).map(f=>f.webkitRelativePath.split('/')[1]).filter(Boolean))];
+  if(!allFiles.length){
+    const ivExists=ivFolders.includes(ivNo);
+    alert(ivExists
+      ? `「${ivNo}」フォルダ内に _RR フォルダが見つかりません。\nSharePointで _RR フォルダを作成してください。`
+      : `I/Vフォルダ「${ivNo}」が見つかりません。\n検出: ${ivFolders.slice(0,5).join(', ')}...`);
+    return;
+  }
+  document.getElementById('folderName').innerHTML=
+    `<b>${photoFolderName}</b>　I/V: <b style="color:var(--ok)">${ivNo}</b>　_RR内: <b style="color:var(--ok)">${allFiles.length}枚</b>`;
+  document.getElementById('scanArea').style.display='block';
+  document.getElementById('photoReview').style.display='none';
+  document.getElementById('setSelectArea').style.display='none';
+  log(`_RRフォルダ内: ${allFiles.length}枚 検出`,'ok');
+  groupIntoSets();
+}
 
+function groupIntoSets(){
+  // ファイル名の連番でセットをグループ化
+  const sorted=[...allFiles].sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
+  photoSets=[];
+  if(!sorted.length)return;
+  const withNum=sorted.map(f=>{
+    const m=f.name.match(/(\d+)/);
+    return{...f,num:m?parseInt(m[1]):0};
+  });
+  let cur=[];
+  for(let i=0;i<withNum.length;i++){
+    if(!cur.length){cur.push(withNum[i]);}
+    else{
+      const gap=withNum[i].num-cur[cur.length-1].num;
+      if(gap>50||cur.length>=20){
+        photoSets.push({id:photoSets.length,files:cur});
+        cur=[withNum[i]];
+      }else{cur.push(withNum[i]);}
+    }
+  }
+  if(cur.length) photoSets.push({id:photoSets.length,files:cur});
+  log(`${photoSets.length}セット検出 (${photoSets.map(s=>s.files.length+'枚').join(' / ')})`,'ok');
+  renderSetGrid();
+}
+
+function renderSetGrid(){
+  const grid=document.getElementById('setGrid');
+  grid.innerHTML='';
+  selectedSetId=null;
+  document.getElementById('runAiBtn').disabled=true;
+  photoSets.forEach(set=>{
+    const card=document.createElement('div');
+    card.className='set-card';
+    card.id=`set-card-${set.id}`;
+    card.onclick=()=>selectSet(set.id);
+    const thumbs=set.files.slice(0,8).map(f=>{
+      const url=URL.createObjectURL(f.file);
+      return `<img class="set-thumb" src="${url}" loading="lazy">`;
+    }).join('');
+    const label=`セット${set.id+1}`;
+    const first=set.files[0]?.name||'';
+    const last=set.files[set.files.length-1]?.name||'';
+    card.innerHTML=`
+      <div class="set-card-header">
+        <span style="font-weight:700;">${label}</span>
+        <span style="color:var(--ok);">${set.files.length}枚</span>
+      </div>
+      <div class="set-thumb-grid">${thumbs}</div>
+      <div class="set-count">${first} 〜 ${last}</div>`;
+    grid.appendChild(card);
+  });
+  document.getElementById('setSelectArea').style.display='block';
+}
+
+function selectSet(id){
+  document.querySelectorAll('.set-card').forEach(c=>c.classList.remove('selected'));
+  document.getElementById(`set-card-${id}`)?.classList.add('selected');
+  selectedSetId=id;
+  document.getElementById('runAiBtn').disabled=false;
+  const set=photoSets.find(s=>s.id===id);
+  log(`セット${id+1}を選択 (${set.files.length}枚) → AI分類ボタンを押してください`,'ok');
+}
+
+async function runAIOnSelectedSet(){
+  if(selectedSetId===null){alert('セットを選択してください。');return;}
+  const set=photoSets.find(s=>s.id===selectedSetId);
+  if(!set)return;
+  allFiles=set.files;
+  await runAI();
+}
 
 function log(msg,type='info'){
   const box=document.getElementById('logBox');const div=document.createElement('div');
