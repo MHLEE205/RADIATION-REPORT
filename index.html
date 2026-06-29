@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v1.2</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v1.3</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -105,7 +105,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v1.2</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v1.3</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -127,11 +127,11 @@ input[type="date"]{color-scheme:dark;}
     <div class="card-body">
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">CY CUT 開始日</label>
+          <label class="form-label">ETD 開始日</label>
           <input type="date" id="dateFrom">
         </div>
         <div class="form-group">
-          <label class="form-label">CY CUT 終了日</label>
+          <label class="form-label">ETD 終了日</label>
           <input type="date" id="dateTo">
         </div>
         <button class="btn btn-primary" onclick="fetchIVList()">🔍 検索</button>
@@ -352,7 +352,7 @@ async function fetchIVList(){
   if(!dateFrom||!dateTo){alert('日付を入力してください。');return;}
   showLoading('COMPASSから韓国向けブッキング検索中...');
   try{
-    const filter=`cr49f_cy_cut ge ${dateFrom}T00:00:00Z and cr49f_cy_cut le ${dateTo}T23:59:59Z`;
+    const filter=`cr49f_etd ge ${dateFrom}T00:00:00Z and cr49f_etd le ${dateTo}T23:59:59Z`;
     const bkgData=await dvGet(
       `cr49f_bookings?$filter=${encodeURIComponent(filter)}`+
       `&$select=cr49f_bookingid,cr49f_main_ship_name,crcf9_bl_etd,cr49f_etd,cr49f_cy_cut,_cr49f_region_id_value,_cr49f_region_japan_id_value,_cr49f_sale_contract_id_value`+
@@ -425,10 +425,10 @@ function renderIVTable(bkgs,regionMap,polMap,scMap){
 // 積載量を非同期取得（一覧表示用）
 async function loadNW(bookingId){
   try{
-    const ctData=await dvGet(`crcf9_container_informations?$filter=_crcf9_booking_id_value eq ${bookingId}&$select=cr49f_net_weight&$top=100`);
-    const totalNw=(ctData.value||[]).reduce((sum,ct)=>sum+(ct.cr49f_net_weight||0),0);
+    const ctData=await dvGet(`crcf9_container_informations?$filter=_crcf9_booking_id_value eq ${bookingId}&$select=crcf9_n_w&$top=100`);
+    const totalNw=(ctData.value||[]).reduce((sum,ct)=>sum+(ct.crcf9_n_w||0),0);
     const cell=document.getElementById(`nw_${bookingId}`);
-    if(cell)cell.textContent=totalNw>0?(totalNw/1000).toFixed(2)+' MT':'—';
+    if(cell)cell.textContent=totalNw>0?(totalNw/1000000).toFixed(2)+' MT':'—';
   }catch(e){}
 }
 
@@ -438,9 +438,9 @@ async function selectIV(bkg,reg,pol,sc,tr){
   showLoading('選択I/V詳細情報取得中...');
   try{
     // コンテナ情報（積載量・品目）
-    const ctData=await dvGet(`crcf9_container_informations?$filter=_crcf9_booking_id_value eq ${bkg.cr49f_bookingid}&$select=cr49f_net_weight,cr49f_item&$top=100`);
+    const ctData=await dvGet(`crcf9_container_informations?$filter=_crcf9_booking_id_value eq ${bkg.cr49f_bookingid}&$select=crcf9_n_w,cr49f_item&$top=100`);
     let totalNw=0;const itemCodes=new Set();
-    (ctData.value||[]).forEach(ct=>{totalNw+=(ct.cr49f_net_weight||0);if(ct.cr49f_item)itemCodes.add(ct.cr49f_item);});
+    (ctData.value||[]).forEach(ct=>{totalNw+=(ct.crcf9_n_w||0);if(ct.cr49f_item)itemCodes.add(ct.cr49f_item);});
 
     // Buyer名取得
     let buyerName='—';
@@ -458,7 +458,7 @@ async function selectIV(bkg,reg,pol,sc,tr){
       vessel:bkg.cr49f_main_ship_name||'—',
       pol:pol.crcf9_pol||'—',
       blDate,
-      nwMT:(totalNw/1000).toFixed(2),
+      nwMT:(totalNw/1000000).toFixed(2),
       pod:reg.cr49f_pod||'—',
       item:itemStr,
       buyer:buyerName,
