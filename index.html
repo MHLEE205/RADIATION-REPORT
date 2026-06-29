@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v1.5</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v1.7</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -105,7 +105,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v1.5</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v1.7</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -330,9 +330,9 @@ function onLoginSuccess(){
   const ub=document.getElementById('userBadge');ub.textContent='✅ '+(S.userName||S.userEmail||'ログイン済み');ub.style.display='inline-block';
   document.getElementById('card1').classList.remove('active');document.getElementById('card1').classList.add('done');
   document.getElementById('card2').classList.add('active');
-  const today=new Date();const m30=new Date(today);m30.setDate(today.getDate()-30);const p30=new Date(today);p30.setDate(today.getDate()+30);
-  document.getElementById('dateFrom').value=m30.toISOString().split('T')[0];
-  document.getElementById('dateTo').value=p30.toISOString().split('T')[0];
+  const today=new Date();const m6=new Date(today);m6.setDate(today.getDate()-6);const p1=new Date(today);p1.setDate(today.getDate()+1);
+  document.getElementById('dateFrom').value=m6.toISOString().split('T')[0];
+  document.getElementById('dateTo').value=p1.toISOString().split('T')[0];
 }
 
 // ── Dataverse API ──
@@ -438,9 +438,9 @@ async function selectIV(bkg,reg,pol,sc,tr){
   showLoading('選択I/V詳細情報取得中...');
   try{
     // コンテナ情報（積載量・品目）
-    const ctData=await dvGet(`crcf9_container_informations?$filter=_crcf9_booking_id_value eq ${bkg.cr49f_bookingid}&$select=crcf9_n_w,cr49f_item&$top=100`);
-    let totalNw=0;const itemCodes=new Set();
-    (ctData.value||[]).forEach(ct=>{totalNw+=(ct.crcf9_n_w||0);if(ct.cr49f_item)itemCodes.add(ct.cr49f_item);});
+    const ctData=await dvGet(`crcf9_container_informations?$filter=_crcf9_booking_id_value eq ${bkg.cr49f_bookingid}&$select=crcf9_n_w&$top=100`);
+    let totalNw=0;
+    (ctData.value||[]).forEach(ct=>{totalNw+=(ct.crcf9_n_w||0);});
 
     // Buyer名取得
     let buyerName='—';
@@ -450,7 +450,15 @@ async function selectIV(bkg,reg,pol,sc,tr){
     }
 
     const blDate=bkg.crcf9_bl_etd?bkg.crcf9_bl_etd.split('T')[0]:(bkg.cr49f_etd?bkg.cr49f_etd.split('T')[0]:'—');
-    const itemStr=[...itemCodes].map(c=>ITEM_MAP[c]||c).join(', ')||'—';
+    // 品目取得: booking_details → sale_contract → sale_details
+    let itemStr='—';
+    if(bkg._cr49f_sale_contract_id_value){
+      try{
+        const sdData=await dvGet(`cr49f_sale_details?$filter=_cr49f_sale_contract_id_value eq ${bkg._cr49f_sale_contract_id_value}&$select=cr49f_item_idname&$top=10`);
+        const items=[...new Set((sdData.value||[]).map(d=>d.cr49f_item_idname).filter(Boolean))];
+        if(items.length) itemStr=items.map(i=>ITEM_MAP[i]||i).join(', ');
+      }catch(e){ itemStr='WASTE PAPER'; }
+    }
 
     S.selectedIV={
       bookingId:bkg.cr49f_bookingid,
