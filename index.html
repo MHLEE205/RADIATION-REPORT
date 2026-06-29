@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v1.7</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v1.8</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -105,7 +105,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v1.7</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v1.8</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -203,8 +203,11 @@ input[type="date"]{color-scheme:dark;}
           <input type="text" id="apiKey" placeholder="sk-ant-..." style="width:260px;font-family:monospace;">
         </div>
       </div>
-      <p style="color:var(--text2);font-size:12px;margin-bottom:10px;">I/Vフォルダ（またはCTフォルダ）を選択すると、AIがRR測定写真を自動で検出・分類します。</p>
-      <button class="btn btn-ghost" onclick="selectFolder()">📂 写真フォルダ選択</button>
+      <p style="color:var(--text2);font-size:12px;margin-bottom:10px;">PHOTOフォルダ全体を選択してください。選択したI/V番号の <strong>_RR</strong> フォルダ内の写真のみをAIが処理します。</p>
+      <label class="btn btn-ghost" style="cursor:pointer;">
+        📂 PHOTOフォルダ選択
+        <input type="file" id="folderInput" webkitdirectory multiple accept="image/*" style="display:none;" onchange="onFolderSelected(this)">
+      </label>
       <span id="folderName" style="margin-left:10px;font-size:12px;color:var(--text2);"></span>
 
       <div id="scanArea" style="display:none;margin-top:14px;">
@@ -495,25 +498,7 @@ function goToStep4(){
 // ── STEP 4: 写真フォルダ選択・AI分類 ──
 let allFiles=[];
 
-async function selectFolder(){
-  try{
-    const dirHandle=await window.showDirectoryPicker({mode:'read'});
-    document.getElementById('folderName').textContent='📁 '+dirHandle.name;
-    document.getElementById('scanArea').style.display='block';
-    document.getElementById('photoReview').style.display='none';
-    allFiles=[];log('フォルダスキャン中...','info');
-    await collectFiles(dirHandle,'');
-    log(`合計 ${allFiles.length}枚の画像ファイルを検出`,'ok');
-    await runAI();
-  }catch(e){if(e.name!=='AbortError')alert('フォルダ選択エラー: '+e.message);}
-}
 
-async function collectFiles(dirHandle,path){
-  for await(const [name,handle] of dirHandle.entries()){
-    if(handle.kind==='file'){if(/\.(jpe?g|png|gif|bmp|webp)$/i.test(name)){const file=await handle.getFile();allFiles.push({name,path:path+'/'+name,file});}}
-    else if(handle.kind==='directory'){await collectFiles(handle,path+'/'+name);}
-  }
-}
 
 function log(msg,type='info'){
   const box=document.getElementById('logBox');const div=document.createElement('div');
