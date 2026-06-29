@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v1.9</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v2.1</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -113,7 +113,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v1.9</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v2.1</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -208,7 +208,7 @@ input[type="date"]{color-scheme:dark;}
       <div class="form-row" style="margin-bottom:10px;">
         <div class="form-group">
           <label class="form-label">API KEY</label>
-          <input type="text" id="apiKey" placeholder="sk-ant-..." style="width:260px;font-family:monospace;">
+          <input type="text" id="apiKey" placeholder="sk-ant-..." style="width:260px;font-family:monospace;" oninput="saveApiKey(this.value)">
         </div>
       </div>
       <p style="color:var(--text2);font-size:12px;margin-bottom:10px;">PHOTOフォルダ全体を選択してください。選択したI/V番号の <strong>_RR</strong> フォルダ内の写真のみをAIが処理します。</p>
@@ -314,7 +314,7 @@ async function startLogin(){
   const verifier=randomStr(64);const challenge=b64url(await sha256(verifier));const state=randomStr(16);
   sessionStorage.setItem('pkce_v',verifier);sessionStorage.setItem('pkce_s',state);
   const p=new URLSearchParams({client_id:CLIENT_ID,response_type:'code',redirect_uri:REDIRECT_URI,scope:SCOPE_DV,state,code_challenge:challenge,code_challenge_method:'S256',prompt:'select_account'});
-  location.href=`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/authorize?${p}`;
+  location.href=`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.1/authorize?${p}`;
 }
 
 async function handleCallback(){
@@ -323,7 +323,7 @@ async function handleCallback(){
   const verifier=sessionStorage.getItem('pkce_v');if(!verifier){alert('セッション期限切れ。再ログインしてください。');return;}
   showLoading('認証中...');
   try{
-    const res=await fetch(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`,{
+    const res=await fetch(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.1/token`,{
       method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
       body:new URLSearchParams({client_id:CLIENT_ID,grant_type:'authorization_code',code,redirect_uri:REDIRECT_URI,code_verifier:verifier,scope:SCOPE_DV})
     });
@@ -338,7 +338,7 @@ async function checkToken(){
   if(S.accessToken&&Date.now()<S.tokenExpiry)return true;
   if(!S.refreshToken){alert('トークン期限切れ。再ログインしてください。');return false;}
   try{
-    const res=await fetch(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`,{
+    const res=await fetch(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.1/token`,{
       method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
       body:new URLSearchParams({client_id:CLIENT_ID,grant_type:'refresh_token',refresh_token:S.refreshToken,scope:SCOPE_DV})
     });
@@ -672,7 +672,7 @@ async function fileToB64(file){return new Promise((res,rej)=>{const reader=new F
 async function callClaude(messages,apiKey,maxTokens=200){
   const response=await fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
-    headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01'},
+    headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
     body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:maxTokens,messages})
   });
   if(!response.ok){const err=await response.json().catch(()=>({}));throw new Error(`Claude APIエラー ${response.status}: ${err?.error?.message||''}`);}
@@ -808,7 +808,15 @@ async function addPhotoPage(doc,startY,labels,photos,values){
 
 function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
 
-window.addEventListener('load',handleCallback);
+// ── API KEY 永続化 ──
+function saveApiKey(val){if(val.trim())localStorage.setItem('leenai_rr_apikey',val.trim());}
+function loadApiKey(){
+  const saved=localStorage.getItem('leenai_rr_apikey')||'';
+  const el=document.getElementById('apiKey');
+  if(el&&saved)el.value=saved;
+}
+
+window.addEventListener('load',()=>{handleCallback();loadApiKey();});
 </script>
 </body>
 </html>
