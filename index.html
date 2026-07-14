@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v2.7</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v3.1</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -128,7 +128,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v2.7</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v3.1</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -279,7 +279,7 @@ input[type="date"]{color-scheme:dark;}
         </div>
 
         <!-- 写真グリッド -->
-        <div id="selectionGrid" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+        <div id="selectionGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;"></div>
 
         <!-- OCR結果・数値確認 -->
         <div id="resultSection" style="display:none;margin-top:16px;">
@@ -841,7 +841,7 @@ function renderSelectionGrid(){
     const catColor={sf:'rgba(239,68,68,.85)',m1:'rgba(79,142,247,.85)',bg:'rgba(34,197,94,.85)'};
     const num=item.category?selState.slice(0,i+1).filter(s=>s.category===item.category).length:'';
     div.innerHTML=`
-      ${item.b64?`<img src="data:image/jpeg;base64,${item.b64}" style="height:200px;width:auto;max-width:220px;object-fit:cover;display:block;">`:`<div style="height:200px;width:150px;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:24px;">📷</div>`}
+      ${item.b64?`<img src="data:image/jpeg;base64,${item.b64}" style="width:100%;height:200px;object-fit:cover;display:block;">`:`<div style="height:200px;width:150px;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:24px;">📷</div>`}
       <div class="sel-badge" style="background:${item.category?catColor[item.category]:'rgba(80,80,80,.7)'};">${item.category?catLabel[item.category]+' '+num:'未選択'}</div>
       <div class="sel-num">${item.file?.name||''}</div>`;
     grid.appendChild(div);
@@ -902,15 +902,18 @@ async function runOCROnSelected(){
       log(`  ${item.file?.name}: ${val!==null?val+' μSv/h':'読取失敗（手動入力してください）'}`,'ok');
     }catch(e){log(`⚠️ OCR失敗: ${item.file?.name} — ${e.message}`,'warn');}
   }
-  // 日付スタンプを追加
+  // 日付スタンプを追加 (b64更新後にS.photosに反映)
   showLoading('日付スタンプを追加中...');
   await stampAllPhotos();
-  hideLoading();
-  // S.photosに反映
+  // スタンプ後のb64でS.photosを更新
   ['sf','m1','bg'].forEach(key=>{
     const items=selState.filter(s=>s.category===key);
-    for(let i=0;i<4;i++) S.photos[key][i]=items[i]||null;
+    for(let i=0;i<4;i++){
+      if(items[i]) S.photos[key][i]={...items[i]};
+      else S.photos[key][i]=null;
+    }
   });
+  hideLoading();
   renderValueGrid();
   calcResults();
   document.getElementById('resultSection').style.display='block';
@@ -1009,6 +1012,10 @@ h1{font-size:15pt;font-weight:700;text-align:center;margin-bottom:10px;letter-sp
 .main-tbl .val{text-align:center;}
 .main-tbl .avg{background:#e8f0fe;font-weight:700;text-align:center;}
 .main-tbl .verdict{font-weight:700;color:${verdictColor};text-align:center;font-size:10pt;}
+.main-tbl .spacer-row{height:8px;border-left:none;border-right:none;background:#fff;}
+.main-tbl .section-header{text-align:center;font-size:8.5pt;padding:6px;background:#fff;border:1px solid #555;}
+.main-tbl .pt-header{text-align:center;font-size:8.5pt;font-weight:400;padding:5px;background:#fff;border:1px solid #555;}
+.main-tbl .avg-plain{text-align:center;font-weight:700;background:#fff;}
 /* 측정업체 행 */
 .sign-tbl{width:100%;border-collapse:collapse;font-size:8.5pt;margin-top:0;}
 .sign-tbl td{border:1px solid #555;padding:7px 8px;vertical-align:middle;}
@@ -1018,8 +1025,8 @@ h1{font-size:15pt;font-weight:700;text-align:center;margin-bottom:10px;letter-sp
 .pc{border:1px solid #555;width:25%;vertical-align:top;text-align:center;}
 .plabel{background:#dce6f1;font-size:8pt;font-weight:700;padding:4px 2px;border-bottom:1px solid #555;}
 .pval{font-size:8pt;font-weight:600;padding:3px 2px;border-bottom:1px solid #555;background:#f5f8ff;}
-.pimg{width:100%;height:165px;object-fit:cover;display:block;}
-.nophoto{height:165px;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:10pt;}
+.pimg{width:100%;height:250px;object-fit:cover;display:block;}
+.nophoto{height:250px;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:10pt;}
 /* 안내문 */
 .notice-box{border:1px solid #555;padding:10px 14px;font-size:8pt;line-height:2;margin-top:10px;}
 .notice-box h3{font-size:9pt;font-weight:700;margin-bottom:4px;text-align:center;}
@@ -1064,9 +1071,9 @@ h1{font-size:15pt;font-weight:700;text-align:center;margin-bottom:10px;letter-sp
     <td class="val">${iv.nwMT||''}</td>
     <td class="val">${iv.pod||''}</td>
   </tr>
-  <!-- 검사 결과 헤더 -->
+  <!-- 검사 결과 -->
   <tr>
-    <td class="row-header" rowspan="10">검사 결과</td>
+    <td class="row-header" rowspan="13">검사 결과</td>
     <td class="col-header">검사도구</td>
     <td class="col-header">측정일자</td>
     <td class="col-header">기준</td>
@@ -1080,59 +1087,62 @@ h1{font-size:15pt;font-weight:700;text-align:center;margin-bottom:10px;letter-sp
     <td class="val">${ratio!==null?ratio.toFixed(9):''}</td>
     <td class="verdict">${verdict}</td>
   </tr>
-  <!-- 배경 -->
+  <!-- 배경 : 빈 여백 행 + 섹션헤더 + 지점헤더 + 수치 -->
+  <tr><td colspan="5" class="spacer-row"></td></tr>
   <tr>
-    <td class="col-header" colspan="5" style="text-align:center;">배경(폐기물로부터 10M 이상 이격) 측정결과（μ㏜/h）</td>
+    <td colspan="5" class="section-header">배경(폐기물로부터 10M 이상 이격) 측정결과（μSv/h）</td>
   </tr>
   <tr>
-    <td class="col-header">지점 1</td>
-    <td class="col-header">지점 2</td>
-    <td class="col-header">지점 3</td>
-    <td class="col-header">지점 4</td>
-    <td class="col-header avg">평균(a)</td>
+    <td class="pt-header">지점 1</td>
+    <td class="pt-header">지점 2</td>
+    <td class="pt-header">지점 3</td>
+    <td class="pt-header">지점 4</td>
+    <td class="pt-header">평균(a)</td>
   </tr>
   <tr>
     <td class="val">${fmtV(S.values.bg[0])}</td>
     <td class="val">${fmtV(S.values.bg[1])}</td>
     <td class="val">${fmtV(S.values.bg[2])}</td>
     <td class="val">${fmtV(S.values.bg[3])}</td>
-    <td class="avg">${fmtV(avgA)}</td>
+    <td class="val avg-plain">${fmtV(avgA)}</td>
   </tr>
   <!-- 1m이격 -->
+  <tr><td colspan="5" class="spacer-row"></td></tr>
   <tr>
-    <td class="col-header" colspan="5" style="text-align:center;">폐기물(1M 이격) 측정결과（μ㏜/h）</td>
+    <td colspan="5" class="section-header">폐기물(1M 이격) 측정결과（μSv/h）</td>
   </tr>
   <tr>
-    <td class="col-header">지점 1</td>
-    <td class="col-header">지점 2</td>
-    <td class="col-header">지점 3</td>
-    <td class="col-header">지점 4</td>
-    <td class="col-header avg">평균</td>
+    <td class="pt-header">지점 1</td>
+    <td class="pt-header">지점 2</td>
+    <td class="pt-header">지점 3</td>
+    <td class="pt-header">지점 4</td>
+    <td class="pt-header">평균</td>
   </tr>
   <tr>
     <td class="val">${fmtV(S.values.m1[0])}</td>
     <td class="val">${fmtV(S.values.m1[1])}</td>
     <td class="val">${fmtV(S.values.m1[2])}</td>
     <td class="val">${fmtV(S.values.m1[3])}</td>
-    <td class="avg">${fmtV(avgM1)}</td>
+    <td class="val avg-plain">${fmtV(avgM1)}</td>
   </tr>
   <!-- 표면 -->
+  <tr><td colspan="5" class="spacer-row"></td></tr>
   <tr>
-    <td class="col-header" colspan="5" style="text-align:center;">폐기물(표면) 측정결과（μ㏜/h）</td>
+    <td colspan="5" class="section-header">폐기물(표면) 측정결과（μSv/h）</td>
   </tr>
   <tr>
-    <td class="col-header">지점 1</td>
-    <td class="col-header">지점 2</td>
-    <td class="col-header">지점 3</td>
-    <td class="col-header">지점 4</td>
-    <td class="col-header avg">평균(b)</td>
+    <td class="pt-header">지점 1</td>
+    <td class="pt-header">지점 2</td>
+    <td class="pt-header">지점 3</td>
+    <td class="pt-header">지점 4</td>
+    <td class="pt-header">평균(b)</td>
   </tr>
   <tr>
     <td class="val">${fmtV(S.values.sf[0])}</td>
     <td class="val">${fmtV(S.values.sf[1])}</td>
     <td class="val">${fmtV(S.values.sf[2])}</td>
     <td class="val">${fmtV(S.values.sf[3])}</td>
-    <td class="avg">${fmtV(avgB)}</td>
+    <td class="val avg-plain">${fmtV(avgB)}</td>
   </tr>
 </table>
 <table class="sign-tbl">
