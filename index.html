@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v3.1</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v3.4</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -128,7 +128,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v3.1</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v3.4</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -164,6 +164,7 @@ input[type="date"]{color-scheme:dark;}
           <thead>
             <tr>
               <th>ETD</th>
+              <th>CY CUT</th>
               <th>I/V No.</th>
               <th>POL（積地）</th>
               <th>POD（揚地）</th>
@@ -474,10 +475,12 @@ function renderIVTable(bkgs,regionMap,polMap,scMap){
     const pol=polMap[b._cr49f_region_japan_id_value]||{};
     const sc=scMap[b._cr49f_sale_contract_id_value]||{};
     const etd=b.cr49f_etd?b.cr49f_etd.split('T')[0]:'—';
+    const cyCut=b.cr49f_cy_cut?b.cr49f_cy_cut.split('T')[0]:'—';
     const ivNo=b.cr49f_invoice_no||'—';
     const tr=document.createElement('tr');
     tr.innerHTML=`
       <td>${etd}</td>
+      <td>${cyCut}</td>
       <td><strong>${ivNo}</strong></td>
       <td>${pol.crcf9_pol||'—'}</td>
       <td>${reg.cr49f_pod||'—'}</td>
@@ -520,13 +523,21 @@ async function selectIV(bkg,reg,pol,sc,tr){
 
     const blDate=bkg.cr49f_etd?bkg.cr49f_etd.split('T')[0]:'—';
     // 品目取得: booking_details → sale_contract → sale_details
-    let itemStr='—';
+    // 品目取得: cr49f_sale_details → $expand=cr49f_item_id($select=cr49f_item)
+    let itemStr='WASTE PAPER';
     if(bkg._cr49f_sale_contract_id_value){
       try{
-        const sdData=await dvGet(`cr49f_sale_details?$filter=_cr49f_sale_contract_id_value eq ${bkg._cr49f_sale_contract_id_value}&$select=cr49f_item_idname&$top=10`);
-        const items=[...new Set((sdData.value||[]).map(d=>d.cr49f_item_idname).filter(Boolean))];
-        if(items.length) itemStr=items.map(i=>ITEM_MAP[i]||i).join(', ');
-      }catch(e){ itemStr='WASTE PAPER'; }
+        const sdData=await dvGet(
+          `cr49f_sale_details?$filter=_cr49f_sale_contract_id_value eq ${bkg._cr49f_sale_contract_id_value}`+
+          `&$select=cr49f_purchase_detailid&$expand=cr49f_item_id($select=cr49f_item)&$top=10`
+        );
+        const codes=[...new Set(
+          (sdData.value||[])
+            .map(d=>d.cr49f_item_id?.cr49f_item)
+            .filter(Boolean)
+        )];
+        if(codes.length) itemStr=codes.map(c=>`WASTE PAPER ${c}`).join(', ');
+      }catch(e){ console.warn('品目取得失敗:',e.message); }
     }
 
     S.selectedIV={
@@ -1025,7 +1036,7 @@ h1{font-size:15pt;font-weight:700;text-align:center;margin-bottom:10px;letter-sp
 .pc{border:1px solid #555;width:25%;vertical-align:top;text-align:center;}
 .plabel{background:#dce6f1;font-size:8pt;font-weight:700;padding:4px 2px;border-bottom:1px solid #555;}
 .pval{font-size:8pt;font-weight:600;padding:3px 2px;border-bottom:1px solid #555;background:#f5f8ff;}
-.pimg{width:100%;height:250px;object-fit:cover;display:block;}
+.pimg{width:100%;height:250px;object-fit:cover;object-position:center;display:block;min-width:100%;}
 .nophoto{height:250px;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:10pt;}
 /* 안내문 */
 .notice-box{border:1px solid #555;padding:10px 14px;font-size:8pt;line-height:2;margin-top:10px;}
@@ -1073,7 +1084,7 @@ h1{font-size:15pt;font-weight:700;text-align:center;margin-bottom:10px;letter-sp
   </tr>
   <!-- 검사 결과 -->
   <tr>
-    <td class="row-header" rowspan="13">검사 결과</td>
+    <td class="row-header" rowspan="14">검사 결과</td>
     <td class="col-header">검사도구</td>
     <td class="col-header">측정일자</td>
     <td class="col-header">기준</td>
@@ -1144,6 +1155,7 @@ h1{font-size:15pt;font-weight:700;text-align:center;margin-bottom:10px;letter-sp
     <td class="val">${fmtV(S.values.sf[3])}</td>
     <td class="val avg-plain">${fmtV(avgB)}</td>
   </tr>
+  <tr><td colspan="5" style="height:6px;border:none;background:#fff;"></td></tr>
 </table>
 <table class="sign-tbl">
   <tr>
@@ -1234,7 +1246,7 @@ async function addDateStamp(b64, dateStr){
       canvas.width=img.width; canvas.height=img.height;
       const ctx=canvas.getContext('2d');
       ctx.drawImage(img,0,0);
-      const fs=Math.max(16,Math.round(img.height*0.04));
+      const fs=Math.max(11,Math.round(img.height*0.028));
       ctx.font=`bold ${fs}px Arial`;
       const pad=Math.round(fs*0.5);
       const tw=ctx.measureText(dateStr).width;
@@ -1258,17 +1270,19 @@ async function stampAllPhotos(){
   // ランダム開始時刻 08:00~18:00
   const startH=8+Math.floor(Math.random()*10);
   const startM=Math.floor(Math.random()*60);
-  let minTotal=startH*60+startM;
+  let secTotal=startH*3600+startM*60+Math.floor(Math.random()*60);
   const targets=selState.filter(s=>s.category);
   for(const item of targets){
     if(!item.b64)continue;
-    const h=Math.floor(minTotal/60).toString().padStart(2,'0');
-    const m=(minTotal%60).toString().padStart(2,'0');
-    const stampStr=`${photoDate} ${h}:${m}`;
+    const h=Math.floor(secTotal/3600).toString().padStart(2,'0');
+    const m=Math.floor((secTotal%3600)/60).toString().padStart(2,'0');
+    const s=(secTotal%60).toString().padStart(2,'0');
+    const stampStr=`${photoDate} ${h}:${m}:${s}`;
     item.b64=await addDateStamp(item.b64,stampStr);
-    minTotal++;
+    // 다음 사진: 1분 + 랜덤 0~30초
+    secTotal+=60+Math.floor(Math.random()*30);
   }
-  log(`日付スタンプ完了: ${photoDate} ${Math.floor((startH*60+startM)/60).toString().padStart(2,'0')}:${((startH*60+startM)%60).toString().padStart(2,'0')}~ 計${targets.length}枚`,'ok');
+  log(`日付スタンプ完了: ${photoDate} 計${targets.length}枚`,'ok');
 }
 
 function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
