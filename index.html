@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v2.3</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v2.4</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -113,7 +113,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v2.3</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v2.4</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -521,54 +521,66 @@ let selectedSetId=null;
 function onFolderSelected(input){
   const files=Array.from(input.files);
   if(!files.length)return;
-  const photoFolderName=files[0].webkitRelativePath.split('/')[0];
   const ivNo=S.selectedIV?.ivNo||'';
-  allFiles=[];
+
+  // IV番号フォルダ特定: パス中にivNoと完全一致するセグメントを探す
+  // 例: PHOTO/NJJ2607-03/_RR/メールフォルダ/xxx.jpg
+  const rrFiles=[];
   for(const f of files){
     if(!/\.(jpe?g|png|gif|bmp|webp)$/i.test(f.name))continue;
     const parts=f.webkitRelativePath.split('/');
-    const ivFolder=parts[1]||'';
-    const hasRR=parts.some(p=>p==='_RR'||p==='RR');
-    if(ivNo && ivFolder===ivNo && hasRR) allFiles.push({name:f.name,path:f.webkitRelativePath,file:f});
+    const ivIdx=parts.findIndex(p=>p===ivNo);
+    if(ivIdx<0)continue;
+    // ivNo以降のパスに_RRフォルダがあるか
+    const afterIv=parts.slice(ivIdx+1);
+    const rrIdx=afterIv.findIndex(p=>p==='_RR'||p==='RR');
+    if(rrIdx<0)continue;
+    // _RR直下のサブフォルダ名を取得(なければ直接ファイル = '直接')
+    const subFolder=afterIv[rrIdx+1]||'';
+    const isDirectFile = !subFolder || /\.(jpe?g|png|gif|bmp|webp)$/i.test(subFolder);
+    const setKey = isDirectFile ? '【直接ファイル】' : subFolder;
+    rrFiles.push({name:f.name, path:f.webkitRelativePath, file:f, setKey});
   }
-  const ivFolders=[...new Set(Array.from(files).map(f=>f.webkitRelativePath.split('/')[1]).filter(Boolean))];
-  if(!allFiles.length){
-    const ivExists=ivFolders.includes(ivNo);
-    alert(ivExists
-      ? `「${ivNo}」フォルダ内に _RR フォルダが見つかりません。\nSharePointで _RR フォルダを作成してください。`
-      : `I/Vフォルダ「${ivNo}」が見つかりません。\n検出: ${ivFolders.slice(0,5).join(', ')}...`);
+
+  // エラーチェック
+  const allParts=Array.from(files).flatMap(f=>f.webkitRelativePath.split('/'));
+  const ivExists=allParts.includes(ivNo);
+  if(!rrFiles.length){
+    if(!ivExists){
+      const ivLike=[...new Set(allParts.filter(p=>/^N[A-Z]{2,3}\d{4}-\d+/.test(p)))];
+      alert(`I/Vフォルダ「${ivNo}」が見つかりません。
+検出されたI/Vフォルダ: ${ivLike.slice(0,8).join(', ')||'なし'}`);
+    } else {
+      alert(`「${ivNo}」フォルダ内に _RR フォルダが見つかりません。
+SharePointで _RR フォルダを作成してください。`);
+    }
     return;
   }
+
+  allFiles=rrFiles;
+  const photoFolderName=files[0].webkitRelativePath.split('/')[0];
   document.getElementById('folderName').innerHTML=
-    `<b>${photoFolderName}</b>　I/V: <b style="color:var(--ok)">${ivNo}</b>　_RR内: <b style="color:var(--ok)">${allFiles.length}枚</b>`;
+    `<b>${photoFolderName}</b>　I/V: <b style="color:var(--ok)">${ivNo}</b>　_RR内: <b style="color:var(--ok)">${rrFiles.length}枚</b>`;
   document.getElementById('scanArea').style.display='block';
   document.getElementById('photoReview').style.display='none';
   document.getElementById('setSelectArea').style.display='none';
-  log(`_RRフォルダ内: ${allFiles.length}枚 検出`,'ok');
+  log(`_RRフォルダ内: ${rrFiles.length}枚 検出`,'ok');
   groupIntoSets();
 }
 
 function groupIntoSets(){
-  // ファイル名の連番でセットをグループ化
-  const sorted=[...allFiles].sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
-  photoSets=[];
-  if(!sorted.length)return;
-  const withNum=sorted.map(f=>{
-    const m=f.name.match(/(\d+)/);
-    return{...f,num:m?parseInt(m[1]):0};
-  });
-  let cur=[];
-  for(let i=0;i<withNum.length;i++){
-    if(!cur.length){cur.push(withNum[i]);}
-    else{
-      const gap=withNum[i].num-cur[cur.length-1].num;
-      if(gap>50||cur.length>=20){
-        photoSets.push({id:photoSets.length,files:cur});
-        cur=[withNum[i]];
-      }else{cur.push(withNum[i]);}
-    }
+  // _RR直下サブフォルダ単位でセットを作成
+  const setMap=new Map();
+  for(const f of allFiles){
+    if(!setMap.has(f.setKey)) setMap.set(f.setKey,[]);
+    setMap.get(f.setKey).push(f);
   }
-  if(cur.length) photoSets.push({id:photoSets.length,files:cur});
+  photoSets=[];
+  let id=0;
+  for(const [key,files] of setMap){
+    const sorted=[...files].sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
+    photoSets.push({id:id++, label:key, files:sorted});
+  }
   log(`${photoSets.length}セット検出 (${photoSets.map(s=>s.files.length+'枚').join(' / ')})`,'ok');
   renderSetGrid();
 }
@@ -587,16 +599,15 @@ function renderSetGrid(){
       const url=URL.createObjectURL(f.file);
       return `<img class="set-thumb" src="${url}" loading="lazy">`;
     }).join('');
-    const label=`セット${set.id+1}`;
-    const first=set.files[0]?.name||'';
-    const last=set.files[set.files.length-1]?.name||'';
+    // ラベルを短縮表示 (長いメールフォルダ名対応)
+    const shortLabel=set.label.length>40?set.label.slice(0,40)+'...':set.label;
     card.innerHTML=`
       <div class="set-card-header">
-        <span style="font-weight:700;">${label}</span>
-        <span style="color:var(--ok);">${set.files.length}枚</span>
+        <span style="font-weight:700;font-size:10px;" title="${set.label}">${shortLabel}</span>
+        <span style="color:var(--ok);flex-shrink:0;margin-left:4px;">${set.files.length}枚</span>
       </div>
       <div class="set-thumb-grid">${thumbs}</div>
-      <div class="set-count">${first} 〜 ${last}</div>`;
+      <div class="set-count">${set.files[0]?.name||''} 〜 ${set.files[set.files.length-1]?.name||''}</div>`;
     grid.appendChild(card);
   });
   document.getElementById('setSelectArea').style.display='block';
@@ -608,15 +619,68 @@ function selectSet(id){
   selectedSetId=id;
   document.getElementById('runAiBtn').disabled=false;
   const set=photoSets.find(s=>s.id===id);
-  log(`セット${id+1}を選択 (${set.files.length}枚) → AI分類ボタンを押してください`,'ok');
+  log(`「${set.label.slice(0,30)}...」を選択 (${set.files.length}枚) → AI分類ボタンを押してください`,'ok');
 }
 
 async function runAIOnSelectedSet(){
   if(selectedSetId===null){alert('セットを選択してください。');return;}
   const set=photoSets.find(s=>s.id===selectedSetId);
   if(!set)return;
-  allFiles=set.files;
-  await runAI();
+
+  // ── ファイル名ルール判定 ──
+  // 0M/1M/10M パターンがあれば AI不要
+  const hasNameRule=set.files.some(f=>/(0[Mm]|0M|0m|1[Mm]|1M|1m|10[Mm]|10M|10m)/.test(f.name));
+  if(hasNameRule){
+    log('ファイル名にカテゴリ情報を検出 → AI不要で自動分類','ok');
+    classifyByFileName(set.files);
+  } else {
+    log('ファイル名にカテゴリ情報なし → AI分類を実行','info');
+    allFiles=set.files;
+    await runAI();
+  }
+}
+
+function classifyByFileName(files){
+  // 0M=表面, 1M=1m離隔, 10M=背景(10m離隔)
+  const classified={bg:[],m1:[],sf:[]};
+  for(const f of files){
+    const n=f.name;
+    if(/10[Mm]/.test(n)) classified.bg.push({...f,value:null});
+    else if(/1[Mm]/.test(n)&&!/10/.test(n)) classified.m1.push({...f,value:null});
+    else if(/0[Mm]/.test(n)&&!/10/.test(n)) classified.sf.push({...f,value:null});
+  }
+  log(`ファイル名分類完了 — 背景:${classified.bg.length} 1m:${classified.m1.length} 表面:${classified.sf.length}`,'ok');
+  // 各カテゴリ最大4枚
+  for(let i=0;i<4;i++){
+    S.photos.bg[i]=classified.bg[i]||null;
+    S.photos.m1[i]=classified.m1[i]||null;
+    S.photos.sf[i]=classified.sf[i]||null;
+    S.values.bg[i]=null;
+    S.values.m1[i]=null;
+    S.values.sf[i]=null;
+  }
+  // サムネイルURL → b64変換してから表示
+  convertAndRender(classified);
+}
+
+async function convertAndRender(classified){
+  showLoading('画像読み込み中...');
+  try{
+    for(const key of ['bg','m1','sf']){
+      for(let i=0;i<4;i++){
+        const item=classified[key]?.[i];
+        if(item?.file){
+          const b64=await fileToB64(item.file);
+          S.photos[key][i]={...item,b64};
+        }
+      }
+    }
+    hideLoading();
+    renderPhotoReview();
+    document.getElementById('photoReview').style.display='block';
+    document.getElementById('photoReview').scrollIntoView({behavior:'smooth'});
+    log('AI不要で分類完了。数値を手動入力してください。','ok');
+  }catch(e){hideLoading();alert('画像読み込みエラー: '+e.message);}
 }
 
 function log(msg,type='info'){
