@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v2.6</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v2.7</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -128,7 +128,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v2.6</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v2.7</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -539,6 +539,7 @@ async function selectIV(bkg,reg,pol,sc,tr){
       pod:reg.cr49f_pod||'—',
       item:itemStr,
       buyer:buyerName,
+      cyCut:bkg.cr49f_cy_cut?bkg.cr49f_cy_cut.split('T')[0]:'',
     };
 
     document.getElementById('infoBuyer').textContent=S.selectedIV.buyer;
@@ -827,7 +828,11 @@ function renderPhotoReview(){
 function renderSelectionGrid(){
   const grid=document.getElementById('selectionGrid');
   grid.innerHTML='';
-  selState.forEach((item,i)=>{
+  // 表面(sf) → 1m(m1) → 10m(bg) → 未選択 の順に表示
+  const catOrder=['sf','m1','bg',null];
+  const displayOrder=[...selState].sort((a,b)=>catOrder.indexOf(a.category)-catOrder.indexOf(b.category));
+  displayOrder.forEach((item)=>{
+    const i=selState.indexOf(item);
     const div=document.createElement('div');
     div.className='sel-photo'+(item.category?' '+item.category:'');
     div.onclick=()=>cycleCategory(i);
@@ -846,15 +851,17 @@ function renderSelectionGrid(){
 function cycleCategory(idx){
   const order=[null,'sf','m1','bg'];
   const cur=selState[idx].category;
-  const next=order[(order.indexOf(cur)+1)%order.length];
-  if(next!==null){
+  let nextIdx=(order.indexOf(cur)+1)%order.length;
+  // 4枚上限を超えるカテゴリはスキップ
+  let loopCount=0;
+  while(nextIdx!==0 && loopCount<4){
+    const next=order[nextIdx];
     const cnt=selState.filter(s=>s.category===next).length;
-    if(cnt>=4){
-      const lbl={sf:'表面(0m)',m1:'1m離隔',bg:'10m離隔'}[next];
-      log(`${lbl}はすでに4枚選択済みです`,'warn');return;
-    }
+    if(cnt<4) break;
+    nextIdx=(nextIdx+1)%order.length;
+    loopCount++;
   }
-  selState[idx].category=next;
+  selState[idx].category=order[nextIdx];
   renderSelectionGrid();
   updateSelectionStatus();
 }
@@ -895,7 +902,15 @@ async function runOCROnSelected(){
       log(`  ${item.file?.name}: ${val!==null?val+' μSv/h':'読取失敗（手動入力してください）'}`,'ok');
     }catch(e){log(`⚠️ OCR失敗: ${item.file?.name} — ${e.message}`,'warn');}
   }
+  // 日付スタンプを追加
+  showLoading('日付スタンプを追加中...');
+  await stampAllPhotos();
   hideLoading();
+  // S.photosに反映
+  ['sf','m1','bg'].forEach(key=>{
+    const items=selState.filter(s=>s.category===key);
+    for(let i=0;i<4;i++) S.photos[key][i]=items[i]||null;
+  });
   renderValueGrid();
   calcResults();
   document.getElementById('resultSection').style.display='block';
@@ -965,90 +980,218 @@ function generatePDF(){
   const ratio=(avgA&&avgB)?avgB/avgA:null;
   const verdict=ratio===null?'':ratio<=0.3?'합격':'불합격';
   const verdictColor=verdict==='합격'?'#16a34a':verdict==='불합격'?'#dc2626':'#111';
+  const ivNo=iv.ivNo&&iv.ivNo!=='—'?iv.ivNo:'REPORT';
 
   function photoCell(p,val,label){
     const src=p?.b64?`data:image/jpeg;base64,${p.b64}`:null;
     const valStr=(val!==null&&val!==undefined&&!isNaN(val))?`${Number(val).toFixed(2)} μSv/h`:'—';
-    return `<td class="pc"><div class="plabel">${label}</div><div class="pval">${valStr}</div>${src?`<img src="${src}" class="pimg">`:`<div class="nophoto">No Photo</div>`}</td>`;
+    return `<td class="pc">
+      <div class="plabel">${label}</div>
+      <div class="pval">&lt;측정값 : ${valStr}&gt;</div>
+      ${src?`<img src="${src}" class="pimg">`:`<div class="nophoto">No Photo</div>`}
+    </td>`;
   }
 
   const html=`<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8">
-<title>방사성물질 간이측정결과</title>
+<title>${ivNo}_RR</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'Malgun Gothic','맑은 고딕','Apple SD Gothic Neo','Noto Sans KR',sans-serif;font-size:9pt;color:#111;background:#fff;}
-.page{width:210mm;min-height:297mm;padding:10mm 12mm;page-break-after:always;position:relative;}
+.page{width:210mm;min-height:297mm;padding:8mm 10mm;page-break-after:always;position:relative;border:0;}
 .page:last-child{page-break-after:auto;}
-h1{font-size:14pt;font-weight:700;text-align:center;margin-bottom:8px;letter-spacing:1px;}
-table{width:100%;border-collapse:collapse;margin-bottom:4px;font-size:8.5pt;}
-th,td{border:1px solid #444;padding:3px 5px;vertical-align:middle;}
-th{background:#dce6f1;font-weight:600;text-align:center;white-space:nowrap;}
-.ctr{text-align:center;} .avg{background:#e8eeff;font-weight:700;text-align:center;}
-.vrd{font-weight:700;font-size:10pt;color:${verdictColor};text-align:center;}
-.sign td{padding:6px 8px;}
-.ptitle{font-size:11pt;font-weight:700;margin-bottom:8px;border-bottom:2px solid #333;padding-bottom:4px;}
-.ptbl{width:100%;border-collapse:collapse;margin-bottom:10px;}
-.pc{border:1px solid #444;width:25%;vertical-align:top;text-align:center;}
-.plabel{background:#dce6f1;font-size:8pt;font-weight:700;padding:3px;border-bottom:1px solid #444;}
-.pval{font-size:8pt;font-weight:600;padding:3px;border-bottom:1px solid #444;background:#f8f8f8;}
-.pimg{width:100%;height:155px;object-fit:cover;display:block;}
-.nophoto{height:155px;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:10pt;}
-.notice{margin-top:14px;border:1px solid #444;padding:8px 12px;font-size:8pt;line-height:1.9;}
-.notice b{font-size:8.5pt;}
-.footer{position:absolute;bottom:5mm;left:12mm;right:12mm;text-align:center;font-size:7pt;color:#888;border-top:1px solid #ddd;padding-top:3px;}
-@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
+h1{font-size:15pt;font-weight:700;text-align:center;margin-bottom:10px;letter-spacing:2px;padding:6px 0;}
+/* 메인 테이블 (보고서 양식) */
+.main-tbl{width:100%;border-collapse:collapse;font-size:8.5pt;margin-bottom:0;}
+.main-tbl th,.main-tbl td{border:1px solid #555;padding:5px 6px;vertical-align:middle;}
+.main-tbl .row-header{background:#dce6f1;font-weight:700;text-align:center;width:50px;white-space:nowrap;}
+.main-tbl .col-header{background:#dce6f1;font-weight:600;text-align:center;white-space:nowrap;}
+.main-tbl .val{text-align:center;}
+.main-tbl .avg{background:#e8f0fe;font-weight:700;text-align:center;}
+.main-tbl .verdict{font-weight:700;color:${verdictColor};text-align:center;font-size:10pt;}
+/* 측정업체 행 */
+.sign-tbl{width:100%;border-collapse:collapse;font-size:8.5pt;margin-top:0;}
+.sign-tbl td{border:1px solid #555;padding:7px 8px;vertical-align:middle;}
+/* 사진 */
+.ptitle{font-size:10pt;font-weight:700;margin:8px 0 6px;border-bottom:2px solid #333;padding-bottom:3px;}
+.ptbl{width:100%;border-collapse:collapse;margin-bottom:6px;}
+.pc{border:1px solid #555;width:25%;vertical-align:top;text-align:center;}
+.plabel{background:#dce6f1;font-size:8pt;font-weight:700;padding:4px 2px;border-bottom:1px solid #555;}
+.pval{font-size:8pt;font-weight:600;padding:3px 2px;border-bottom:1px solid #555;background:#f5f8ff;}
+.pimg{width:100%;height:165px;object-fit:cover;display:block;}
+.nophoto{height:165px;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:10pt;}
+/* 안내문 */
+.notice-box{border:1px solid #555;padding:10px 14px;font-size:8pt;line-height:2;margin-top:10px;}
+.notice-box h3{font-size:9pt;font-weight:700;margin-bottom:4px;text-align:center;}
+.notice-box p{margin:1px 0;}
+.notice-box .section{font-weight:700;margin-top:6px;}
+.footer{position:absolute;bottom:4mm;left:10mm;right:10mm;text-align:center;font-size:7pt;color:#999;border-top:1px solid #ddd;padding-top:3px;}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+.page{page-break-after:always;}.page:last-child{page-break-after:auto;}}
 </style></head><body>
 
+<!-- ══ PAGE 1 ══ -->
 <div class="page">
 <h1>방사성물질 간이측정결과</h1>
-<table><tr><th>수입업체명</th><th>수출업체명</th><th>수출업체 주소</th><th>폐기물 품목</th></tr>
-<tr><td>${iv.buyer||''}</td><td>${EXPORTER_NAME}</td><td style="font-size:7.5pt;">${EXPORTER_ADDR}</td><td>${iv.item||''}</td></tr></table>
-
-<table><tr><th>선박명</th><th>선적항(일본)</th><th>선적일(입항예정일)</th><th>선적량(톤)</th><th>입항항구(한국)</th></tr>
-<tr><td>${iv.vessel||''}</td><td class="ctr">${iv.pol||''}</td><td class="ctr">${iv.blDate||''}</td><td class="ctr">${iv.nwMT||''} MT</td><td class="ctr">${iv.pod||''}</td></tr></table>
-
-<table><tr><th>검사도구</th><th>측정일자</th><th>기준</th><th>방사선 증가율(b/a)</th><th>판정</th></tr>
-<tr><td class="ctr">${tool}</td><td class="ctr">${meas}</td><td class="ctr">0.3</td><td class="ctr">${ratio!==null?ratio.toFixed(9):''}</td><td class="vrd">${verdict}</td></tr></table>
-
-<table>
-<tr><th colspan="5">배경(폐기물로부터 10M 이상 이격) 측정결과（μSv/h）</th></tr>
-<tr><th>지점 1</th><th>지점 2</th><th>지점 3</th><th>지점 4</th><th class="avg">평균(a)</th></tr>
-<tr><td class="ctr">${fmtV(S.values.bg[0])}</td><td class="ctr">${fmtV(S.values.bg[1])}</td><td class="ctr">${fmtV(S.values.bg[2])}</td><td class="ctr">${fmtV(S.values.bg[3])}</td><td class="avg">${fmtV(avgA)}</td></tr></table>
-
-<table>
-<tr><th colspan="5">폐기물(1M 이격) 측정결과（μSv/h）</th></tr>
-<tr><th>지점 1</th><th>지점 2</th><th>지점 3</th><th>지점 4</th><th class="avg">평균</th></tr>
-<tr><td class="ctr">${fmtV(S.values.m1[0])}</td><td class="ctr">${fmtV(S.values.m1[1])}</td><td class="ctr">${fmtV(S.values.m1[2])}</td><td class="ctr">${fmtV(S.values.m1[3])}</td><td class="avg">${fmtV(avgM1)}</td></tr></table>
-
-<table>
-<tr><th colspan="5">폐기물(표면) 측정결과（μSv/h）</th></tr>
-<tr><th>지점 1</th><th>지점 2</th><th>지점 3</th><th>지점 4</th><th class="avg">평균(b)</th></tr>
-<tr><td class="ctr">${fmtV(S.values.sf[0])}</td><td class="ctr">${fmtV(S.values.sf[1])}</td><td class="ctr">${fmtV(S.values.sf[2])}</td><td class="ctr">${fmtV(S.values.sf[3])}</td><td class="avg">${fmtV(avgB)}</td></tr></table>
-
-<table class="sign" style="margin-top:6px;">
-<tr><td style="width:14%;font-weight:600;">측정업체</td><td style="width:36%;">${EXPORTER_NAME}</td><td style="width:10%;font-weight:600;text-align:center;">담당자</td><td style="width:25%;">${staff}</td><td style="width:15%;text-align:center;">(印)</td></tr></table>
+<table class="main-tbl">
+  <!-- 업체 정보 -->
+  <tr>
+    <td class="row-header" rowspan="2">업체 정보</td>
+    <td class="col-header">수입업체명</td>
+    <td class="col-header">수출업체명</td>
+    <td class="col-header" colspan="2">수출업체 주소</td>
+    <td class="col-header">폐기물 품목</td>
+  </tr>
+  <tr>
+    <td>${iv.buyer||''}</td>
+    <td>${EXPORTER_NAME}</td>
+    <td colspan="2" style="font-size:7.5pt;">${EXPORTER_ADDR}</td>
+    <td>${iv.item||''}</td>
+  </tr>
+  <!-- 선적 정보 -->
+  <tr>
+    <td class="row-header" rowspan="2">선적 정보</td>
+    <td class="col-header">선박명</td>
+    <td class="col-header">선적항<br>(일본)</td>
+    <td class="col-header">선적일<br>입항(예정)일</td>
+    <td class="col-header">선적량<br>(톤)</td>
+    <td class="col-header">입항항구<br>(한국)</td>
+  </tr>
+  <tr>
+    <td>${iv.vessel||''}</td>
+    <td class="val">${iv.pol||''}</td>
+    <td class="val">${iv.blDate||''}</td>
+    <td class="val">${iv.nwMT||''}</td>
+    <td class="val">${iv.pod||''}</td>
+  </tr>
+  <!-- 검사 결과 헤더 -->
+  <tr>
+    <td class="row-header" rowspan="10">검사 결과</td>
+    <td class="col-header">검사도구</td>
+    <td class="col-header">측정일자</td>
+    <td class="col-header">기준</td>
+    <td class="col-header">방사선 증가율<br>(b/a)</td>
+    <td class="col-header">판정</td>
+  </tr>
+  <tr>
+    <td class="val">${tool}</td>
+    <td class="val">${meas}</td>
+    <td class="val">0.3</td>
+    <td class="val">${ratio!==null?ratio.toFixed(9):''}</td>
+    <td class="verdict">${verdict}</td>
+  </tr>
+  <!-- 배경 -->
+  <tr>
+    <td class="col-header" colspan="5" style="text-align:center;">배경(폐기물로부터 10M 이상 이격) 측정결과（μ㏜/h）</td>
+  </tr>
+  <tr>
+    <td class="col-header">지점 1</td>
+    <td class="col-header">지점 2</td>
+    <td class="col-header">지점 3</td>
+    <td class="col-header">지점 4</td>
+    <td class="col-header avg">평균(a)</td>
+  </tr>
+  <tr>
+    <td class="val">${fmtV(S.values.bg[0])}</td>
+    <td class="val">${fmtV(S.values.bg[1])}</td>
+    <td class="val">${fmtV(S.values.bg[2])}</td>
+    <td class="val">${fmtV(S.values.bg[3])}</td>
+    <td class="avg">${fmtV(avgA)}</td>
+  </tr>
+  <!-- 1m이격 -->
+  <tr>
+    <td class="col-header" colspan="5" style="text-align:center;">폐기물(1M 이격) 측정결과（μ㏜/h）</td>
+  </tr>
+  <tr>
+    <td class="col-header">지점 1</td>
+    <td class="col-header">지점 2</td>
+    <td class="col-header">지점 3</td>
+    <td class="col-header">지점 4</td>
+    <td class="col-header avg">평균</td>
+  </tr>
+  <tr>
+    <td class="val">${fmtV(S.values.m1[0])}</td>
+    <td class="val">${fmtV(S.values.m1[1])}</td>
+    <td class="val">${fmtV(S.values.m1[2])}</td>
+    <td class="val">${fmtV(S.values.m1[3])}</td>
+    <td class="avg">${fmtV(avgM1)}</td>
+  </tr>
+  <!-- 표면 -->
+  <tr>
+    <td class="col-header" colspan="5" style="text-align:center;">폐기물(표면) 측정결과（μ㏜/h）</td>
+  </tr>
+  <tr>
+    <td class="col-header">지점 1</td>
+    <td class="col-header">지점 2</td>
+    <td class="col-header">지점 3</td>
+    <td class="col-header">지점 4</td>
+    <td class="col-header avg">평균(b)</td>
+  </tr>
+  <tr>
+    <td class="val">${fmtV(S.values.sf[0])}</td>
+    <td class="val">${fmtV(S.values.sf[1])}</td>
+    <td class="val">${fmtV(S.values.sf[2])}</td>
+    <td class="val">${fmtV(S.values.sf[3])}</td>
+    <td class="avg">${fmtV(avgB)}</td>
+  </tr>
+</table>
+<table class="sign-tbl">
+  <tr>
+    <td style="width:12%;font-weight:700;">측정<br>업체명 :</td>
+    <td style="width:35%;">${EXPORTER_NAME}</td>
+    <td style="width:10%;font-weight:700;">담당자 :</td>
+    <td style="width:25%;">${staff}</td>
+    <td style="width:18%;text-align:center;font-size:14pt;">(印)</td>
+  </tr>
+</table>
 <div class="footer">✦ Powered by LEENAI Automation System</div>
 </div>
 
+<!-- ══ PAGE 2 ══ -->
 <div class="page">
 <div class="ptitle">＜측정 사진＞</div>
-<table class="ptbl"><tr>${photoCell(S.photos.bg[0],S.values.bg[0],'배경(10m이격) 1')}${photoCell(S.photos.bg[1],S.values.bg[1],'배경(10m이격) 2')}${photoCell(S.photos.bg[2],S.values.bg[2],'배경(10m이격) 3')}${photoCell(S.photos.bg[3],S.values.bg[3],'배경(10m이격) 4')}</tr></table>
-<table class="ptbl"><tr>${photoCell(S.photos.m1[0],S.values.m1[0],'폐기물(1m이격) 1')}${photoCell(S.photos.m1[1],S.values.m1[1],'폐기물(1m이격) 2')}${photoCell(S.photos.m1[2],S.values.m1[2],'폐기물(1m이격) 3')}${photoCell(S.photos.m1[3],S.values.m1[3],'폐기물(1m이격) 4')}</tr></table>
+<table class="ptbl"><tr>
+  ${photoCell(S.photos.bg[0],S.values.bg[0],'배경(10m이격)1')}
+  ${photoCell(S.photos.bg[1],S.values.bg[1],'배경(10m이격)2')}
+  ${photoCell(S.photos.bg[2],S.values.bg[2],'배경(10m이격)3')}
+  ${photoCell(S.photos.bg[3],S.values.bg[3],'배경(10m이격)4')}
+</tr></table>
+<table class="ptbl"><tr>
+  ${photoCell(S.photos.m1[0],S.values.m1[0],'폐기물(1m이격)1')}
+  ${photoCell(S.photos.m1[1],S.values.m1[1],'폐기물(1m이격)2')}
+  ${photoCell(S.photos.m1[2],S.values.m1[2],'폐기물(1m이격)3')}
+  ${photoCell(S.photos.m1[3],S.values.m1[3],'폐기물(1m이격)4')}
+</tr></table>
 <div class="footer">✦ Powered by LEENAI Automation System</div>
 </div>
 
+<!-- ══ PAGE 3 ══ -->
 <div class="page">
-<div class="ptitle">＜측정 사진 (표면)＞</div>
-<table class="ptbl"><tr>${photoCell(S.photos.sf[0],S.values.sf[0],'폐기물(표면) 1')}${photoCell(S.photos.sf[1],S.values.sf[1],'폐기물(표면) 2')}${photoCell(S.photos.sf[2],S.values.sf[2],'폐기물(표면) 3')}${photoCell(S.photos.sf[3],S.values.sf[3],'폐기물(표면) 4')}</tr></table>
-<div class="notice">
-<b>【방사능물질 간이측정결과 안내】</b><br>
-<b>◆수출업체</b><br>
-1. 폐기물의 한국 수출 시 방사성물질 간이측정결과는 반드시 본 양식에 따라 작성할 것<br>
-2. 사진은 촬영 일시 확인이 가능해야 함<br>
-3. 배경(10m이격)/폐기물(1m이격)/폐기물(표면)의 측정방향은 각 지점별로 동일하여야 함<br>
-<b>◆수입업체</b><br>
-1. 방사성물질 간이측정결과는 수출입폐기물포털시스템에 통관 시마다 제출
+<table class="ptbl"><tr>
+  ${photoCell(S.photos.sf[0],S.values.sf[0],'폐기물(표면)1')}
+  ${photoCell(S.photos.sf[1],S.values.sf[1],'폐기물(표면)2')}
+  ${photoCell(S.photos.sf[2],S.values.sf[2],'폐기물(표면)3')}
+  ${photoCell(S.photos.sf[3],S.values.sf[3],'폐기물(표면)4')}
+</tr></table>
+<div class="notice-box">
+  <h3>【방사능물질 간이측정결과 안내】</h3>
+  <p class="section">❖수출업체</p>
+  <p>　1. 폐기물의 한국 수출시 '방사성물질 간이측정결과'는 반드시 본 양식에 따라 작성할 것</p>
+  <p>　　（포괄 수입 허가(신고)의 경우 통관 시마다 별도 작성）</p>
+  <p>　2. 사진은 촬영 일시 확인이 가능해야함</p>
+  <p>　　（촬영일시를 확인할 수 없는 자료는 불인정）</p>
+  <p>　3. 배경（10m이격）/폐기물（1m이격）/폐기물（표면）의 측정방향은</p>
+  <p>　　각 지점별로 동일하여야 하며 각 지점마다 다른 방향에서 측정한 결과값을 기입</p>
+  <p>　예시: 배경（10m 이격）1/폐기물（1m 이격）1/폐기물（표면）1은</p>
+  <p>　　모두 남쪽에서 폐기물방향(북쪽)으로 다가가면서 측정한 결과 및 사진이고,</p>
+  <p>　　배경（10m이격）2/폐기물（1m이격）2/폐기물（표면）2는</p>
+  <p>　　모두 동쪽에서 폐기물방향(서쪽)으로 다가가면서 측정한 결과</p>
+  <p class="section">❖수입업체</p>
+  <p>　1. '방사성물질 간이측정결과'는 수출입폐기물포털시스템에 통관 시마다 제출</p>
+  <p>　　（미제출 적발업체는 포괄 허가(신고) 제한）</p>
+  <p>　2. 상기 수출업체 조치사항이 명확하지 않거나, 방사성물질의 오염이 의심될 경우 서류 보완 또는 반려</p>
+  <p>　❋폐기물 표면에 가까워질수록 평균 방사선 값이 증가하거나,</p>
+  <p>　　폐기물 표면에서 측정된 방사선 값이 환경방사선량 이상인 경우</p>
 </div>
 <div class="footer">✦ Powered by LEENAI Automation System</div>
 </div>
@@ -1057,9 +1200,65 @@ th{background:#dce6f1;font-weight:600;text-align:center;white-space:nowrap;}
 
   const win=window.open('','_blank','width=900,height=750');
   if(!win){alert('ポップアップがブロックされています。許可してください。');return;}
+  win.document.title=`${ivNo}_RR`;
   win.document.write(html);
   win.document.close();
   setTimeout(()=>win.print(),800);
+}
+
+
+// ── 写真に日付スタンプを追加 (Canvas) ──
+function getCyCutMinusOne(cyCut){
+  if(!cyCut)return '';
+  const d=new Date(cyCut+'T00:00:00');
+  d.setDate(d.getDate()-1);
+  return d.toISOString().split('T')[0];
+}
+
+async function addDateStamp(b64, dateStr){
+  // dateStr: "YYYY-MM-DD HH:MM"
+  return new Promise((res)=>{
+    const img=new Image();
+    img.onload=()=>{
+      const canvas=document.createElement('canvas');
+      canvas.width=img.width; canvas.height=img.height;
+      const ctx=canvas.getContext('2d');
+      ctx.drawImage(img,0,0);
+      const fs=Math.max(16,Math.round(img.height*0.04));
+      ctx.font=`bold ${fs}px Arial`;
+      const pad=Math.round(fs*0.5);
+      const tw=ctx.measureText(dateStr).width;
+      const x=img.width-tw-pad*2-8;
+      const y=img.height-pad-8;
+      ctx.fillStyle='rgba(0,0,0,0.6)';
+      ctx.fillRect(x-pad/2,y-fs-pad/2,tw+pad,fs+pad);
+      ctx.fillStyle='#ffffff';
+      ctx.fillText(dateStr,x,y);
+      res(canvas.toDataURL('image/jpeg',0.92).split(',')[1]);
+    };
+    img.onerror=()=>res(b64);
+    img.src='data:image/jpeg;base64,'+b64;
+  });
+}
+
+async function stampAllPhotos(){
+  const iv=S.selectedIV||{};
+  const photoDate=getCyCutMinusOne(iv.cyCut);
+  if(!photoDate){log('CY CUTが不明のため日付スタンプをスキップ','warn');return;}
+  // ランダム開始時刻 08:00~18:00
+  const startH=8+Math.floor(Math.random()*10);
+  const startM=Math.floor(Math.random()*60);
+  let minTotal=startH*60+startM;
+  const targets=selState.filter(s=>s.category);
+  for(const item of targets){
+    if(!item.b64)continue;
+    const h=Math.floor(minTotal/60).toString().padStart(2,'0');
+    const m=(minTotal%60).toString().padStart(2,'0');
+    const stampStr=`${photoDate} ${h}:${m}`;
+    item.b64=await addDateStamp(item.b64,stampStr);
+    minTotal++;
+  }
+  log(`日付スタンプ完了: ${photoDate} ${Math.floor((startH*60+startM)/60).toString().padStart(2,'0')}:${((startH*60+startM)%60).toString().padStart(2,'0')}~ 計${targets.length}枚`,'ok');
 }
 
 function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
