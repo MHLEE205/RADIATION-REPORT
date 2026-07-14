@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v2.2</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v2.3</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -113,7 +113,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v2.2</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v2.3</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -376,8 +376,8 @@ async function fetchIVList(){
     const filter=`cr49f_etd ge ${dateFrom}T00:00:00Z and cr49f_etd le ${dateTo}T23:59:59Z`;
     const bkgData=await dvGet(
       `cr49f_bookings?$filter=${encodeURIComponent(filter)}`+
-      `&$select=cr49f_bookingid,cr49f_invoice_no,cr49f_main_ship_name,crcf9_bl_etd,cr49f_etd,cr49f_cy_cut,_cr49f_region_id_value,_cr49f_region_japan_id_value,_cr49f_sale_contract_id_value`+
-      `&$orderby=crcf9_bl_etd asc&$top=200`
+      `&$select=cr49f_bookingid,cr49f_invoice_no,cr49f_main_ship_name,cr49f_etd,cr49f_cy_cut,_cr49f_region_id_value,_cr49f_region_japan_id_value,_cr49f_sale_contract_id_value`+
+      `&$orderby=cr49f_etd asc&$top=200`
     );
     if(!bkgData.value?.length){hideLoading();alert('該当期間にブッキングがありません。');return;}
 
@@ -425,7 +425,7 @@ function renderIVTable(bkgs,regionMap,polMap,scMap){
     const reg=regionMap[b._cr49f_region_id_value]||{};
     const pol=polMap[b._cr49f_region_japan_id_value]||{};
     const sc=scMap[b._cr49f_sale_contract_id_value]||{};
-    const etd=b.crcf9_bl_etd?b.crcf9_bl_etd.split('T')[0]:(b.cr49f_etd?b.cr49f_etd.split('T')[0]:'—');
+    const etd=b.cr49f_etd?b.cr49f_etd.split('T')[0]:'—';
     const ivNo=b.cr49f_invoice_no||'—';
     const tr=document.createElement('tr');
     tr.innerHTML=`
@@ -470,7 +470,7 @@ async function selectIV(bkg,reg,pol,sc,tr){
       catch(e){}
     }
 
-    const blDate=bkg.crcf9_bl_etd?bkg.crcf9_bl_etd.split('T')[0]:(bkg.cr49f_etd?bkg.cr49f_etd.split('T')[0]:'—');
+    const blDate=bkg.cr49f_etd?bkg.cr49f_etd.split('T')[0]:'—';
     // 品目取得: booking_details → sale_contract → sale_details
     let itemStr='—';
     if(bkg._cr49f_sale_contract_id_value){
