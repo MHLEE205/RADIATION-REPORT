@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v2.4</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v2.5</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -113,7 +113,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v2.4</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v2.5</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -260,8 +260,8 @@ input[type="date"]{color-scheme:dark;}
   <div class="card" id="card5">
     <div class="card-title"><span class="badge badge-step">STEP 5</span> PDF生成・ダウンロード</div>
     <div class="card-body">
-      <p style="color:var(--text2);font-size:12px;margin-bottom:12px;">韓国の放射性物質簡易測定結果様式でPDFを生成します。</p>
-      <button class="btn btn-ok" onclick="generatePDF()">📄 PDF生成・ダウンロード</button>
+      <p style="color:var(--text2);font-size:12px;margin-bottom:12px;">韓国の放射性物質簡易測定結果様式を印刷プレビューで開きます。ブラウザの印刷機能でPDF保存してください。</p>
+      <button class="btn btn-ok" onclick="generatePDF()">🖨️ 印刷プレビュー（PDF保存）</button>
     </div>
   </div>
 
@@ -800,74 +800,117 @@ function goToStep5(){
   document.getElementById('card5').classList.add('active');document.getElementById('card5').scrollIntoView({behavior:'smooth'});
 }
 
-// ── STEP 5: PDF生成 ──
-async function generatePDF(){
-  showLoading('PDF生成中...');
-  try{
-    if(!window.jspdf)await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-    const {jsPDF}=window.jspdf;const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-    const iv=S.selectedIV||{};
-    const tool=document.getElementById('inspTool').value;
-    const meas=document.getElementById('measDate').value;
-    const staff=document.getElementById('staffSel').value;
-    const avg=arr=>{const v=arr.filter(x=>x!==null&&!isNaN(x));return v.length?(v.reduce((a,b)=>a+b,0)/v.length):null;};
-    const fmtV=v=>v===null?'':v.toFixed(2);
-    const avgA=avg(S.values.bg);const avgB=avg(S.values.sf);const avgM1=avg(S.values.m1);
-    const ratio=(avgA&&avgB)?avgB/avgA:null;const verdict=ratio===null?'':ratio<=0.3?'합격':'불합격';
 
-    doc.setFont('helvetica');doc.setFontSize(14);doc.setFont(undefined,'bold');
-    doc.text('방사성물질 간이측정결과',105,18,{align:'center'});
 
-    const drawTable=(headers,rows,y,colWidths)=>{
-      let x=10;doc.setFillColor(230,235,245);doc.setFont(undefined,'bold');doc.setFontSize(7);
-      headers.forEach((h,i)=>{doc.rect(x,y,colWidths[i],7,'FD');doc.text(h,x+colWidths[i]/2,y+4.5,{align:'center'});x+=colWidths[i];});
-      doc.setFont(undefined,'normal');let ry=y+7;
-      rows.forEach(row=>{x=10;doc.setFillColor(255,255,255);row.forEach((cell,i)=>{doc.rect(x,ry,colWidths[i],8);doc.text(String(cell||''),x+2,ry+5,{maxWidth:colWidths[i]-4});x+=colWidths[i];});ry+=8;});
-      return ry;
-    };
+// ── STEP 5: 印刷プレビュー（HTML方式） ──
+function generatePDF(){
+  const iv=S.selectedIV||{};
+  const tool=document.getElementById('inspTool').value;
+  const meas=document.getElementById('measDate').value;
+  const staff=document.getElementById('staffSel').value;
+  const avg=arr=>{const v=arr.filter(x=>x!==null&&!isNaN(x));return v.length?(v.reduce((a,b)=>a+b,0)/v.length):null;};
+  const fmtV=v=>(v===null||v===undefined||isNaN(v))?'':Number(v).toFixed(2);
+  const avgA=avg(S.values.bg);
+  const avgM1=avg(S.values.m1);
+  const avgB=avg(S.values.sf);
+  const ratio=(avgA&&avgB)?avgB/avgA:null;
+  const verdict=ratio===null?'':ratio<=0.3?'합격':'불합격';
+  const verdictColor=verdict==='합격'?'#16a34a':verdict==='불합격'?'#dc2626':'#111';
 
-    let y=25;doc.setFontSize(8);
-    y=drawTable(['수입업체명','수출업체명','수출업체 주소','폐기물 품목'],[[iv.buyer||'',EXPORTER_NAME,EXPORTER_ADDR,iv.item||'']],y,[40,40,80,30]);
-    y=drawTable(['선박명','선적항(일본)','선적일','선적량(톤)','입항항구(한국)'],[[iv.vessel||'',iv.pol||'',iv.blDate||'',iv.nwMT||'',iv.pod||'']],y+2,[38,30,30,22,70]);
-    y=drawTable(['검사도구','측정일자','기준','방사선 증가율(b/a)','판정'],[[tool,meas,'0.3',ratio?ratio.toFixed(9):'',verdict]],y+2,[30,30,15,60,55]);
-    y=drawTable(['배경(폐기물로부터 10M 이상 이격) 측정결과（μSv/h）','','','',''],
-      [['지점 1','지점 2','지점 3','지점 4','평균(a)'],[fmtV(S.values.bg[0]),fmtV(S.values.bg[1]),fmtV(S.values.bg[2]),fmtV(S.values.bg[3]),fmtV(avgA)]],y+2,[38,38,38,38,38]);
-    y=drawTable(['폐기물(1M 이격) 측정결과（μSv/h）','','','',''],
-      [['지점 1','지점 2','지점 3','지점 4','평균'],[fmtV(S.values.m1[0]),fmtV(S.values.m1[1]),fmtV(S.values.m1[2]),fmtV(S.values.m1[3]),fmtV(avgM1)]],y+2,[38,38,38,38,38]);
-    y=drawTable(['폐기물(표면) 측정결과（μSv/h）','','','',''],
-      [['지점 1','지점 2','지점 3','지점 4','평균(b)'],[fmtV(S.values.sf[0]),fmtV(S.values.sf[1]),fmtV(S.values.sf[2]),fmtV(S.values.sf[3]),fmtV(avgB)]],y+2,[38,38,38,38,38]);
-
-    y+=4;doc.setFont(undefined,'bold');doc.setFontSize(8);
-    doc.text('측정업체:',10,y+5);doc.setFont(undefined,'normal');doc.text(EXPORTER_NAME,40,y+5);
-    doc.text('담당자:',110,y+5);doc.text(staff,130,y+5);doc.text('(印)',175,y+5);doc.rect(10,y,190,10);
-    doc.setFontSize(7);doc.setTextColor(150);doc.text('✦ Powered by LEENAI Automation System',105,292,{align:'center'});doc.setTextColor(0);
-
-    doc.addPage();doc.setFontSize(9);doc.setFont(undefined,'bold');doc.text('<측정 사진>',10,12);doc.setFont(undefined,'normal');
-    await addPhotoPage(doc,14,['배경(10m이격)1','배경(10m이격)2','배경(10m이격)3','배경(10m이격)4'],S.photos.bg,S.values.bg);
-    await addPhotoPage(doc,100,['폐기물(1m이격)1','폐기물(1m이격)2','폐기물(1m이격)3','폐기물(1m이격)4'],S.photos.m1,S.values.m1);
-    doc.setFontSize(7);doc.setTextColor(150);doc.text('✦ Powered by LEENAI Automation System',105,292,{align:'center'});doc.setTextColor(0);
-
-    doc.addPage();doc.setFontSize(9);doc.setFont(undefined,'bold');doc.text('<측정 사진 (표면)>',10,12);doc.setFont(undefined,'normal');
-    await addPhotoPage(doc,14,['폐기물(표면)1','폐기물(표면)2','폐기물(표면)3','폐기물(표면)4'],S.photos.sf,S.values.sf);
-    doc.setFontSize(7);doc.setFont(undefined,'bold');doc.text('【방사능물질 간이측정결과 안내】',10,165);doc.setFont(undefined,'normal');
-    ['◆수출업체','1. 폐기물의 한국 수출 시 방사성물질 간이측정결과는 반드시 본 양식에 따라 작성할 것','2. 사진은 촬영 일시 확인이 가능해야 함','3. 배경/폐기물(1m이격)/폐기물(표면)의 측정방향은 각 지점별로 동일하여야 함','◆수입업체','1. 방사성물질 간이측정결과는 수출입폐기물포털시스템에 통관 시마다 제출'].forEach((line,i)=>{doc.text(line,10,172+(i*5));});
-    doc.setFontSize(7);doc.setTextColor(150);doc.text('✦ Powered by LEENAI Automation System',105,292,{align:'center'});doc.setTextColor(0);
-
-    doc.save(`RR_${iv.ivNo||iv.buyer||'REPORT'}_${meas||'nodate'}.pdf`);
-    hideLoading();
-  }catch(e){hideLoading();alert('PDF生成エラー: '+e.message);console.error(e);}
-}
-
-async function addPhotoPage(doc,startY,labels,photos,values){
-  const colW=46,colH=55,labelH=10;
-  for(let i=0;i<4;i++){
-    const x=10+i*(colW+1),y=startY;
-    doc.setFontSize(7);doc.setFont(undefined,'bold');doc.rect(x,y,colW,labelH);doc.text(labels[i],x+colW/2,y+4,{align:'center'});
-    const valStr=values[i]!==null?`<측정값: ${values[i]} μSv/h>`:'<측정값: —>';
-    doc.setFont(undefined,'normal');doc.text(valStr,x+colW/2,y+8.5,{align:'center'});
-    if(photos[i]?.b64){try{doc.addImage('data:image/jpeg;base64,'+photos[i].b64,'JPEG',x,y+labelH,colW,colH);}catch(e){doc.rect(x,y+labelH,colW,colH);}}
-    else{doc.rect(x,y+labelH,colW,colH);doc.setTextColor(180);doc.text('No Photo',x+colW/2,y+labelH+colH/2,{align:'center'});doc.setTextColor(0);}
+  function photoCell(p,val,label){
+    const src=p?.b64?`data:image/jpeg;base64,${p.b64}`:null;
+    const valStr=(val!==null&&val!==undefined&&!isNaN(val))?`${Number(val).toFixed(2)} μSv/h`:'—';
+    return `<td class="pc"><div class="plabel">${label}</div><div class="pval">${valStr}</div>${src?`<img src="${src}" class="pimg">`:`<div class="nophoto">No Photo</div>`}</td>`;
   }
+
+  const html=`<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8">
+<title>방사성물질 간이측정결과</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Malgun Gothic','맑은 고딕','Apple SD Gothic Neo','Noto Sans KR',sans-serif;font-size:9pt;color:#111;background:#fff;}
+.page{width:210mm;min-height:297mm;padding:10mm 12mm;page-break-after:always;position:relative;}
+.page:last-child{page-break-after:auto;}
+h1{font-size:14pt;font-weight:700;text-align:center;margin-bottom:8px;letter-spacing:1px;}
+table{width:100%;border-collapse:collapse;margin-bottom:4px;font-size:8.5pt;}
+th,td{border:1px solid #444;padding:3px 5px;vertical-align:middle;}
+th{background:#dce6f1;font-weight:600;text-align:center;white-space:nowrap;}
+.ctr{text-align:center;} .avg{background:#e8eeff;font-weight:700;text-align:center;}
+.vrd{font-weight:700;font-size:10pt;color:${verdictColor};text-align:center;}
+.sign td{padding:6px 8px;}
+.ptitle{font-size:11pt;font-weight:700;margin-bottom:8px;border-bottom:2px solid #333;padding-bottom:4px;}
+.ptbl{width:100%;border-collapse:collapse;margin-bottom:10px;}
+.pc{border:1px solid #444;width:25%;vertical-align:top;text-align:center;}
+.plabel{background:#dce6f1;font-size:8pt;font-weight:700;padding:3px;border-bottom:1px solid #444;}
+.pval{font-size:8pt;font-weight:600;padding:3px;border-bottom:1px solid #444;background:#f8f8f8;}
+.pimg{width:100%;height:155px;object-fit:cover;display:block;}
+.nophoto{height:155px;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:10pt;}
+.notice{margin-top:14px;border:1px solid #444;padding:8px 12px;font-size:8pt;line-height:1.9;}
+.notice b{font-size:8.5pt;}
+.footer{position:absolute;bottom:5mm;left:12mm;right:12mm;text-align:center;font-size:7pt;color:#888;border-top:1px solid #ddd;padding-top:3px;}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
+</style></head><body>
+
+<div class="page">
+<h1>방사성물질 간이측정결과</h1>
+<table><tr><th>수입업체명</th><th>수출업체명</th><th>수출업체 주소</th><th>폐기물 품목</th></tr>
+<tr><td>${iv.buyer||''}</td><td>${EXPORTER_NAME}</td><td style="font-size:7.5pt;">${EXPORTER_ADDR}</td><td>${iv.item||''}</td></tr></table>
+
+<table><tr><th>선박명</th><th>선적항(일본)</th><th>선적일(입항예정일)</th><th>선적량(톤)</th><th>입항항구(한국)</th></tr>
+<tr><td>${iv.vessel||''}</td><td class="ctr">${iv.pol||''}</td><td class="ctr">${iv.blDate||''}</td><td class="ctr">${iv.nwMT||''} MT</td><td class="ctr">${iv.pod||''}</td></tr></table>
+
+<table><tr><th>검사도구</th><th>측정일자</th><th>기준</th><th>방사선 증가율(b/a)</th><th>판정</th></tr>
+<tr><td class="ctr">${tool}</td><td class="ctr">${meas}</td><td class="ctr">0.3</td><td class="ctr">${ratio!==null?ratio.toFixed(9):''}</td><td class="vrd">${verdict}</td></tr></table>
+
+<table>
+<tr><th colspan="5">배경(폐기물로부터 10M 이상 이격) 측정결과（μSv/h）</th></tr>
+<tr><th>지점 1</th><th>지점 2</th><th>지점 3</th><th>지점 4</th><th class="avg">평균(a)</th></tr>
+<tr><td class="ctr">${fmtV(S.values.bg[0])}</td><td class="ctr">${fmtV(S.values.bg[1])}</td><td class="ctr">${fmtV(S.values.bg[2])}</td><td class="ctr">${fmtV(S.values.bg[3])}</td><td class="avg">${fmtV(avgA)}</td></tr></table>
+
+<table>
+<tr><th colspan="5">폐기물(1M 이격) 측정결과（μSv/h）</th></tr>
+<tr><th>지점 1</th><th>지점 2</th><th>지점 3</th><th>지점 4</th><th class="avg">평균</th></tr>
+<tr><td class="ctr">${fmtV(S.values.m1[0])}</td><td class="ctr">${fmtV(S.values.m1[1])}</td><td class="ctr">${fmtV(S.values.m1[2])}</td><td class="ctr">${fmtV(S.values.m1[3])}</td><td class="avg">${fmtV(avgM1)}</td></tr></table>
+
+<table>
+<tr><th colspan="5">폐기물(표면) 측정결과（μSv/h）</th></tr>
+<tr><th>지점 1</th><th>지점 2</th><th>지점 3</th><th>지점 4</th><th class="avg">평균(b)</th></tr>
+<tr><td class="ctr">${fmtV(S.values.sf[0])}</td><td class="ctr">${fmtV(S.values.sf[1])}</td><td class="ctr">${fmtV(S.values.sf[2])}</td><td class="ctr">${fmtV(S.values.sf[3])}</td><td class="avg">${fmtV(avgB)}</td></tr></table>
+
+<table class="sign" style="margin-top:6px;">
+<tr><td style="width:14%;font-weight:600;">측정업체</td><td style="width:36%;">${EXPORTER_NAME}</td><td style="width:10%;font-weight:600;text-align:center;">담당자</td><td style="width:25%;">${staff}</td><td style="width:15%;text-align:center;">(印)</td></tr></table>
+<div class="footer">✦ Powered by LEENAI Automation System</div>
+</div>
+
+<div class="page">
+<div class="ptitle">＜측정 사진＞</div>
+<table class="ptbl"><tr>${photoCell(S.photos.bg[0],S.values.bg[0],'배경(10m이격) 1')}${photoCell(S.photos.bg[1],S.values.bg[1],'배경(10m이격) 2')}${photoCell(S.photos.bg[2],S.values.bg[2],'배경(10m이격) 3')}${photoCell(S.photos.bg[3],S.values.bg[3],'배경(10m이격) 4')}</tr></table>
+<table class="ptbl"><tr>${photoCell(S.photos.m1[0],S.values.m1[0],'폐기물(1m이격) 1')}${photoCell(S.photos.m1[1],S.values.m1[1],'폐기물(1m이격) 2')}${photoCell(S.photos.m1[2],S.values.m1[2],'폐기물(1m이격) 3')}${photoCell(S.photos.m1[3],S.values.m1[3],'폐기물(1m이격) 4')}</tr></table>
+<div class="footer">✦ Powered by LEENAI Automation System</div>
+</div>
+
+<div class="page">
+<div class="ptitle">＜측정 사진 (표면)＞</div>
+<table class="ptbl"><tr>${photoCell(S.photos.sf[0],S.values.sf[0],'폐기물(표면) 1')}${photoCell(S.photos.sf[1],S.values.sf[1],'폐기물(표면) 2')}${photoCell(S.photos.sf[2],S.values.sf[2],'폐기물(표면) 3')}${photoCell(S.photos.sf[3],S.values.sf[3],'폐기물(표면) 4')}</tr></table>
+<div class="notice">
+<b>【방사능물질 간이측정결과 안내】</b><br>
+<b>◆수출업체</b><br>
+1. 폐기물의 한국 수출 시 방사성물질 간이측정결과는 반드시 본 양식에 따라 작성할 것<br>
+2. 사진은 촬영 일시 확인이 가능해야 함<br>
+3. 배경(10m이격)/폐기물(1m이격)/폐기물(표면)의 측정방향은 각 지점별로 동일하여야 함<br>
+<b>◆수입업체</b><br>
+1. 방사성물질 간이측정결과는 수출입폐기물포털시스템에 통관 시마다 제출
+</div>
+<div class="footer">✦ Powered by LEENAI Automation System</div>
+</div>
+
+</body></html>`;
+
+  const win=window.open('','_blank','width=900,height=750');
+  if(!win){alert('ポップアップがブロックされています。許可してください。');return;}
+  win.document.write(html);
+  win.document.close();
+  setTimeout(()=>win.print(),800);
 }
 
 function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
