@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v3.9</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v4.0</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -100,7 +100,7 @@ input[type="date"]{color-scheme:dark;}
 .set-thumb{width:100%;aspect-ratio:1;object-fit:cover;border-radius:2px;background:var(--border);}
 .set-count{font-size:10px;color:var(--text2);padding:4px 10px 6px;}
 .sel-photo{position:relative;cursor:pointer;border-radius:6px;overflow:hidden;border:3px solid var(--border);transition:border-color .15s;}
-.sel-photo img{height:200px;width:auto;max-width:220px;object-fit:cover;display:block;}
+.sel-photo img{height:200px;width:100%;object-fit:contain;background:#000;display:block;}
 .sel-badge{position:absolute;top:6px;left:6px;font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;color:#fff;backdrop-filter:blur(2px);}
 .sel-num{position:absolute;bottom:6px;right:6px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:4px;color:#fff;background:rgba(0,0,0,.5);}
 .sel-photo.sf{border-color:#ef4444;}
@@ -128,7 +128,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v3.9</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v4.0</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -853,7 +853,7 @@ function renderSelectionGrid(){
     const catColor={sf:'rgba(239,68,68,.85)',m1:'rgba(79,142,247,.85)',bg:'rgba(34,197,94,.85)'};
     const num=item.category?selState.slice(0,i+1).filter(s=>s.category===item.category).length:'';
     div.innerHTML=`
-      ${item.b64?`<img src="data:image/jpeg;base64,${item.b64}" style="width:100%;height:200px;object-fit:cover;display:block;">`:`<div style="height:200px;width:150px;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:24px;">📷</div>`}
+      ${item.b64?`<img src="data:image/jpeg;base64,${item.b64}" style="width:100%;height:200px;object-fit:contain;background:#000;display:block;">`:`<div style="height:200px;width:150px;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:24px;">📷</div>`}
       <div class="sel-badge" style="background:${item.category?catColor[item.category]:'rgba(80,80,80,.7)'};">${item.category?catLabel[item.category]+' '+num:'未選択'}</div>
       <div class="sel-num">${item.file?.name||''}</div>`;
     grid.appendChild(div);
@@ -1037,7 +1037,7 @@ h1{font-size:15pt;font-weight:700;text-align:center;margin-bottom:10px;letter-sp
 .pc{border:1px solid #555;width:25%;vertical-align:top;text-align:center;}
 .plabel{background:#dce6f1;font-size:8pt;font-weight:700;padding:4px 2px;border-bottom:1px solid #555;}
 .pval{font-size:8pt;font-weight:600;padding:3px 2px;border-bottom:1px solid #555;background:#f5f8ff;}
-.pimg{width:100%;height:250px;object-fit:cover;object-position:center;display:block;min-width:100%;}
+.pimg{width:100%;height:250px;object-fit:contain;background:#000;display:block;}
 .nophoto{height:250px;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:10pt;}
 /* 안내문 */
 .notice-box{border:1px solid #555;padding:10px 14px;font-size:8pt;line-height:2;margin-top:10px;}
