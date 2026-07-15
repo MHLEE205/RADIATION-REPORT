@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v3.5</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v3.7</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -128,7 +128,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v3.5</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v3.7</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -497,7 +497,7 @@ function renderIVTable(bkgs,regionMap,polMap,scMap){
 // 積載量を非同期取得（一覧表示用）
 async function loadNW(bookingId){
   try{
-    const ctData=await dvGet(`crcf9_container_informations?$filter=_crcf9_booking_id_value eq ${bookingId}&$select=crcf9_n_w&$top=100`);
+    const ctData=await dvGet(`crcf9_container_informations?$filter=_crcf9_booking_id_value eq ${bookingId}&$select=crcf9_n_w,_crcf9_item_id_value&$top=100`);
     const totalNw=(ctData.value||[]).reduce((sum,ct)=>sum+(ct.crcf9_n_w||0),0);
     const cell=document.getElementById(`nw_${bookingId}`);
     if(cell)cell.textContent=totalNw>0?(totalNw/1000).toFixed(2)+' MT':'—';
@@ -523,22 +523,23 @@ async function selectIV(bkg,reg,pol,sc,tr){
 
     const blDate=bkg.cr49f_etd?bkg.cr49f_etd.split('T')[0]:'—';
     // 品目取得: booking_details → sale_contract → sale_details
-    // 品目取得: cr49f_sale_details → $expand=cr49f_item_id($select=cr49f_item)
+    // 品目取得: container_information → _crcf9_item_id_value → cr49f_items
     let itemStr='WASTE PAPER';
-    if(bkg._cr49f_sale_contract_id_value){
-      try{
-        const sdData=await dvGet(
-          `cr49f_sale_details?$filter=_cr49f_sale_contract_id_value eq ${bkg._cr49f_sale_contract_id_value}`+
-          `&$select=cr49f_purchase_detailid&$expand=cr49f_item_id($select=cr49f_item)&$top=10`
-        );
-        const codes=[...new Set(
-          (sdData.value||[])
-            .map(d=>d.cr49f_item_id?.cr49f_item)
-            .filter(Boolean)
-        )];
+    try{
+      const itemGuids=[...new Set(
+        (ctData.value||[]).map(ct=>ct._crcf9_item_id_value).filter(Boolean)
+      )];
+      if(itemGuids.length){
+        const codes=[];
+        for(const guid of itemGuids){
+          try{
+            const it=await dvGet(`cr49f_items(${guid})?$select=cr49f_item`);
+            if(it.cr49f_item) codes.push(it.cr49f_item);
+          }catch(e){}
+        }
         if(codes.length) itemStr=codes.map(c=>`WASTE PAPER ${c}`).join(', ');
-      }catch(e){ console.warn('品目取得失敗:',e.message); }
-    }
+      }
+    }catch(e){ console.warn('品目取得失敗:',e.message); }
 
     S.selectedIV={
       bookingId:bkg.cr49f_bookingid,
