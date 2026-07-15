@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v4.8</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v4.9</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -128,7 +128,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v4.8</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v4.9</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -1213,43 +1213,51 @@ function getCyCutMinusOne(cyCut){
 }
 
 async function addDateStamp(b64, dateStr){
-  // 가로 사진: 90도 회전 후 날짜 스탬프 (세로 사진과 동일하게 오른쪽 하단)
-  // 세로 사진: 그대로 + 불투명 박스로 날짜 표시
+  // 세로 사진: 원본 그대로 → 오른쪽 하단 날짜 스탬프
+  // 가로 사진: 가로 상태에서 먼저 오른쪽 하단 날짜 스탬프 → 그 다음 90도 회전
+  //   (기존 카메라 날짜가 가로 기준 오른쪽 하단에 있으므로, 회전 전에 덮어야 함)
   return new Promise((res)=>{
     const img=new Image();
     img.onload=()=>{
       const isLandscape=img.width>img.height;
-      const canvas=document.createElement('canvas');
-      const ctx_main=canvas.getContext('2d');
 
-      if(isLandscape){
-        // 90도 시계방향 회전
-        canvas.width=img.height; canvas.height=img.width;
-        ctx_main.save();
-        ctx_main.translate(canvas.width,0);
-        ctx_main.rotate(Math.PI/2);
-        ctx_main.drawImage(img,0,0);
-        ctx_main.restore();
-      } else {
-        canvas.width=img.width; canvas.height=img.height;
-        ctx_main.drawImage(img,0,0);
-      }
+      // Step 1: 원본 방향 그대로 캔버스에 그림
+      const initCanvas=document.createElement('canvas');
+      initCanvas.width=img.width; initCanvas.height=img.height;
+      const initCtx=initCanvas.getContext('2d');
+      initCtx.drawImage(img,0,0);
 
-      // 날짜 스탬프 — 세로/가로 공통 (오른쪽 하단, 불투명 박스)
-      const fs=Math.max(11,Math.round(canvas.height*0.028));
-      ctx_main.font=`bold ${fs}px Arial`;
+      // Step 2: 원본 기준 오른쪽 하단에 날짜 스탬프 (가로/세로 공통)
+      const fs=Math.max(11,Math.round(img.height*0.028));
+      initCtx.font=`bold ${fs}px Arial`;
       const pad=Math.round(fs*0.4);
-      const tw=ctx_main.measureText(dateStr).width;
+      const tw=initCtx.measureText(dateStr).width;
       const boxW=tw+pad*2;
       const boxH=fs+pad*2;
-      const bx=canvas.width-boxW-6;
-      const by=canvas.height-boxH-6;
-      ctx_main.fillStyle='rgba(0,0,0,0.65)';
-      ctx_main.fillRect(bx,by,boxW,boxH);
-      ctx_main.fillStyle='#ffffff';
-      ctx_main.fillText(dateStr,bx+pad,by+fs+Math.round(pad*0.5));
+      const bx=img.width-boxW-6;
+      const by=img.height-boxH-6;
+      initCtx.fillStyle='rgba(0,0,0,0.65)';
+      initCtx.fillRect(bx,by,boxW,boxH);
+      initCtx.fillStyle='#ffffff';
+      initCtx.fillText(dateStr,bx+pad,by+fs+Math.round(pad*0.5));
 
-      res(canvas.toDataURL('image/jpeg',0.92).split(',')[1]);
+      if(!isLandscape){
+        // 세로 사진: 스탬프 완료, 그대로 반환
+        res(initCanvas.toDataURL('image/jpeg',0.92).split(',')[1]);
+        return;
+      }
+
+      // Step 3: 가로 사진 → 스탬프 완료 후 90도 시계방향 회전
+      const rotCanvas=document.createElement('canvas');
+      rotCanvas.width=img.height; rotCanvas.height=img.width;
+      const rotCtx=rotCanvas.getContext('2d');
+      rotCtx.save();
+      rotCtx.translate(rotCanvas.width,0);
+      rotCtx.rotate(Math.PI/2);
+      rotCtx.drawImage(initCanvas,0,0);
+      rotCtx.restore();
+
+      res(rotCanvas.toDataURL('image/jpeg',0.92).split(',')[1]);
     };
     img.onerror=()=>res(b64);
     img.src='data:image/jpeg;base64,'+b64;
