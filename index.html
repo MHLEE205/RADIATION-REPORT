@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v5.0</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v5.1</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -128,7 +128,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v5.0</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v5.1</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -1229,7 +1229,7 @@ async function addDateStamp(b64, dateStr){
 
       // Step 2: 원본 기준 오른쪽 하단에 날짜 스탬프 (가로/세로 공통)
       // 가로 사진은 회전 후 상대적으로 작아 보이므로 1.3배 크게
-      const fs=Math.max(11,Math.round(img.height*0.028*(isLandscape?1.3:1.0)));
+      const fs=Math.max(11,Math.round(img.height*0.028*(isLandscape?1.6:1.0)));
       initCtx.font=`bold ${fs}px Arial`;
       const pad=Math.round(fs*0.4);
       const tw=initCtx.measureText(dateStr).width;
@@ -1287,7 +1287,7 @@ async function stampAllPhotos(){
     const h=Math.floor(secTotal/3600).toString().padStart(2,'0');
     const m=Math.floor((secTotal%3600)/60).toString().padStart(2,'0');
     const s=(secTotal%60).toString().padStart(2,'0');
-    const stampStr=`${photoDate} ${h}:${m}:${s}`;
+    const stampStr=`${photoDate} ${h}:${m}`;
     item.b64=await addDateStamp(item.b64,stampStr);
     // 다음 사진: 1분 + 랜덤 0~30초
     secTotal+=60+Math.floor(Math.random()*30);
