@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v4.1</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v4.2</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -128,7 +128,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v4.1</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v4.2</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -227,7 +227,7 @@ input[type="date"]{color-scheme:dark;}
           <input type="text" id="apiKey" placeholder="sk-ant-..." style="width:260px;font-family:monospace;" oninput="saveApiKey(this.value)">
         </div>
       </div>
-      <p style="color:var(--text2);font-size:12px;margin-bottom:10px;">PHOTOフォルダ全体を選択してください。選択したI/V番号の <strong>_RR</strong> フォルダ内の写真のみをAIが処理します。</p>
+      <p style="color:var(--text2);font-size:12px;margin-bottom:10px;">PHOTOフォルダ全体を選択してください。選択したI/V番号の <strong>_RR</strong> フォルダ内の写真を表示します。</p>
       <label class="btn btn-ghost" style="cursor:pointer;">
         📂 PHOTOフォルダ選択
         <input type="file" id="folderInput" webkitdirectory multiple accept="image/*" style="display:none;" onchange="onFolderSelected(this)">
@@ -245,7 +245,7 @@ input[type="date"]{color-scheme:dark;}
           </div>
           <div class="set-grid" id="setGrid"></div>
           <div style="margin-top:12px;text-align:right;">
-            <button class="btn btn-primary" id="runAiBtn" onclick="runAIOnSelectedSet()" disabled>🤖 選択したセットをAI分類</button>
+            <button class="btn btn-primary" id="runAiBtn" onclick="runAIOnSelectedSet()" disabled>📂 選択したセットを読み込む</button>
           </div>
         </div>
       </div>
@@ -692,12 +692,23 @@ async function runAIOnSelectedSet(){
   // 0M/1M/10M パターンがあれば AI不要
   const hasNameRule=set.files.some(f=>/(0[Mm]|0M|0m|1[Mm]|1M|1m|10[Mm]|10M|10m)/.test(f.name));
   if(hasNameRule){
-    log('ファイル名にカテゴリ情報を検出 → AI不要で自動分類','ok');
+    log('ファイル名にカテゴリ情報を検出 → 自動分類','ok');
     classifyByFileName(set.files);
   } else {
-    log('ファイル名にカテゴリ情報なし → AI分類を実行','info');
-    allFiles=set.files;
-    await runAI();
+    // b64変換して選択UIへ (AI分類なし)
+    showLoading('画像読み込み中...');
+    try{
+      for(const f of allFiles){
+        if(!f.b64&&f.file) f.b64=await fileToB64(f.file);
+      }
+      hideLoading();
+      selState=allFiles.map(f=>({file:f,b64:f.b64||null,category:null}));
+      renderSelectionGrid();
+      updateSelectionStatus();
+      document.getElementById('photoReview').style.display='block';
+      document.getElementById('photoReview').scrollIntoView({behavior:'smooth'});
+      log(`${allFiles.length}枚読み込み完了 → 写真をクリックして分類してください`,'ok');
+    }catch(e){hideLoading();alert('読み込みエラー: '+e.message);}
   }
 }
 
@@ -757,46 +768,7 @@ function log(msg,type='info'){
 }
 function setProgress(pct,label){document.getElementById('progressFill').style.width=pct+'%';document.getElementById('progressLabel').textContent=label;}
 
-async function runAI(){
-  const apiKey=document.getElementById('apiKey').value.trim();
-  if(!apiKey){alert('API KEYを入力してください。');return;}
-  const total=allFiles.length;if(!total){alert('画像ファイルがありません。');return;}
-  log('AI分類開始...','info');setProgress(0,`0 / ${total} 処理中`);
-
-  const rrFiles=[];
-  for(let i=0;i<total;i++){
-    const f=allFiles[i];setProgress(Math.round((i+1)/total*50),`[第1段階] ${i+1}/${total} — RR判別: ${f.name}`);
-    try{
-      const b64=await fileToB64(f.file);const isRR=await checkIsRR(b64,apiKey);
-      if(isRR){rrFiles.push({...f,b64});log(`✅ RR写真: ${f.name}`,'ok');}
-      else{log(`— 除外: ${f.name}`,'info');}
-    }catch(e){log(`⚠️ 判別失敗: ${f.name} — ${e.message}`,'warn');}
-  }
-
-  log(`RR写真 ${rrFiles.length}枚検出`,'ok');if(!rrFiles.length){alert('RR測定写真が見つかりません。');return;}
-
-  const classified={bg:[],m1:[],sf:[]};
-  for(let i=0;i<rrFiles.length;i++){
-    const f=rrFiles[i];setProgress(50+Math.round((i+1)/rrFiles.length*50),`[第2段階] ${i+1}/${rrFiles.length} — 分類: ${f.name}`);
-    try{
-      const result=await classifyRR(f.b64,apiKey);
-      log(`  → ${result.type}: ${result.value} μSv/h (${f.name})`,'ok');
-      if(result.type==='background')classified.bg.push({...f,value:result.value});
-      else if(result.type==='waste_1m')classified.m1.push({...f,value:result.value});
-      else if(result.type==='surface')classified.sf.push({...f,value:result.value});
-    }catch(e){log(`⚠️ 分類失敗: ${f.name} — ${e.message}`,'warn');}
-  }
-
-  setProgress(100,'完了!');
-  log(`背景 ${classified.bg.length}枚、1m離隔 ${classified.m1.length}枚、表面 ${classified.sf.length}枚`,'ok');
-  for(let i=0;i<4;i++){
-    S.photos.bg[i]=classified.bg[i]||null;S.photos.m1[i]=classified.m1[i]||null;S.photos.sf[i]=classified.sf[i]||null;
-    S.values.bg[i]=classified.bg[i]?.value??null;S.values.m1[i]=classified.m1[i]?.value??null;S.values.sf[i]=classified.sf[i]?.value??null;
-  }
-  renderPhotoReview();
-  document.getElementById('photoReview').style.display='block';
-  document.getElementById('photoReview').scrollIntoView({behavior:'smooth'});
-}
+// runAI 제거 — AI 분류 불필요, 담당자 수동 선택으로 대체
 
 async function fileToB64(file){return new Promise((res,rej)=>{const reader=new FileReader();reader.onload=e=>res(e.target.result.split(',')[1]);reader.onerror=rej;reader.readAsDataURL(file);});}
 
@@ -810,22 +782,7 @@ async function callClaude(messages,apiKey,maxTokens=200){
   const data=await response.json();return data.content[0]?.text?.trim()||'';
 }
 
-async function checkIsRR(b64,apiKey){
-  const text=await callClaude([{role:'user',content:[
-    {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
-    {type:'text',text:'この写真が放射線測定写真かどうか判定してください。放射線測定器(RANGER, RANGENなどのデジタルLCD機器)が写っており、μSv/hの数値がLCDに表示されているものが対象です。YES または NO のみ答えてください。'}
-  ]}],apiKey,10);
-  return text.toUpperCase().includes('YES');
-}
-
-async function classifyRR(b64,apiKey){
-  const text=await callClaude([{role:'user',content:[
-    {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
-    {type:'text',text:'この放射線測定写真を分類し数値を読み取ってください。\n分類基準:\n- background: 廃棄物から10m以上離れた背景での測定\n- waste_1m: 廃棄物から1m離れての測定\n- surface: 廃棄物表面に密着しての測定\nLCDのμSv/h数値を読み取ってください。\nJSON形式のみで返答: {"type":"background|waste_1m|surface","value":0.00}'}
-  ]}],apiKey,60);
-  const match=text.match(/\{[\s\S]*\}/);if(!match)throw new Error('JSONパース失敗: '+text);
-  return JSON.parse(match[0]);
-}
+// checkIsRR, classifyRR 제거 (AI 분류 불필요)
 
 // ── 写真選択UI ──
 let selState=[];
@@ -896,36 +853,52 @@ function updateSelectionStatus(){
 async function runOCROnSelected(){
   const apiKey=document.getElementById('apiKey').value.trim();
   if(!apiKey){alert('API KEYを入力してください。');return;}
-  // S.photos / S.values に反映
-  ['sf','m1','bg'].forEach(key=>{
-    const items=selState.filter(s=>s.category===key);
-    for(let i=0;i<4;i++){S.photos[key][i]=items[i]||null;S.values[key][i]=null;}
-  });
-  showLoading('AI数値読取中...');
+
   const targets=selState.filter(s=>s.category);
+  if(!targets.length){alert('写真を分類してください。');return;}
+
+  // ── STEP A: b64 未取得分を変換 ──
+  showLoading('画像準備中...');
+  for(const item of targets){
+    if(!item.b64&&item.file?.file){
+      try{ item.b64=await fileToB64(item.file.file); }catch(e){}
+    }
+  }
+
+  // ── STEP B: AI 数値読取 ──
+  showLoading('AI数値読取中...');
+  // S.values 초기화
+  ['sf','m1','bg'].forEach(key=>{
+    for(let i=0;i<4;i++) S.values[key][i]=null;
+  });
   for(let i=0;i<targets.length;i++){
     const item=targets[i];
     setProgress(Math.round((i+1)/targets.length*100),`[OCR] ${i+1}/${targets.length} — ${item.file?.name||''}`);
+    if(!item.b64){log(`⚠️ b64なし: ${item.file?.name}`,'warn');continue;}
     try{
       const val=await readValue(item.b64,apiKey);
       const sKey=item.category;
       const idx=selState.filter(s=>s.category===item.category).indexOf(item);
-      if(idx>=0&&idx<4)S.values[sKey][idx]=val;
-      log(`  ${item.file?.name}: ${val!==null?val+' μSv/h':'読取失敗（手動入力してください）'}`,'ok');
+      if(idx>=0&&idx<4) S.values[sKey][idx]=val;
+      log(`  ${item.file?.name}: ${val!==null?val+' μSv/h':'読取失敗（手動入力）'}`,'ok');
     }catch(e){log(`⚠️ OCR失敗: ${item.file?.name} — ${e.message}`,'warn');}
   }
-  // 日付スタンプを追加 (b64更新後にS.photosに反映)
-  showLoading('日付スタンプを追加中...');
+
+  // ── STEP C: 日付スタンプ + 加로 回転 (addDateStamp内で処理) ──
+  showLoading('日付スタンプ・回転処理中...');
   await stampAllPhotos();
-  // スタンプ後のb64でS.photosを更新
+
+  // ── STEP D: スタンプ済みb64でS.photosを確実に反映 ──
   ['sf','m1','bg'].forEach(key=>{
     const items=selState.filter(s=>s.category===key);
     for(let i=0;i<4;i++){
-      if(items[i]) S.photos[key][i]={...items[i]};
-      else S.photos[key][i]=null;
+      S.photos[key][i]=items[i]?{...items[i]}:null;
     }
   });
+
   hideLoading();
+  setProgress(100,'完了!');
+  log(`完了 — 표면:${selState.filter(s=>s.category==='sf').length}枚 1m:${selState.filter(s=>s.category==='m1').length}枚 10m:${selState.filter(s=>s.category==='bg').length}枚`,'ok');
   renderValueGrid();
   calcResults();
   document.getElementById('resultSection').style.display='block';
@@ -1287,8 +1260,12 @@ async function addDateStamp(b64, dateStr){
 
 async function stampAllPhotos(){
   const iv=S.selectedIV||{};
-  const photoDate=getCyCutMinusOne(iv.cyCut);
-  if(!photoDate){log('CY CUTが不明のため日付スタンプをスキップ','warn');return;}
+  // cyCut 없으면 오늘 날짜로 대체 (스킵 방지)
+  let photoDate=getCyCutMinusOne(iv.cyCut);
+  if(!photoDate){
+    photoDate=new Date().toISOString().split('T')[0];
+    log('CY CUT未設定 → 本日日付でスタンプ: '+photoDate,'warn');
+  }
   // ランダム開始時刻 08:00~18:00
   const startH=8+Math.floor(Math.random()*10);
   const startM=Math.floor(Math.random()*60);
