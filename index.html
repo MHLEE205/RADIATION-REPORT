@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v4.7</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v4.8</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -128,7 +128,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v4.7</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v4.8</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -192,11 +192,15 @@ input[type="date"]{color-scheme:dark;}
       <div class="form-row" style="margin-top:14px;">
         <div class="form-group">
           <label class="form-label">検査機器</label>
-          <select id="inspTool">
+          <select id="inspTool" onchange="toggleInspOther(this.value)">
             <option value="RANGER">RANGER</option>
             <option value="RANGEN">RANGEN</option>
             <option value="その他">その他</option>
           </select>
+        </div>
+        <div class="form-group" id="inspOtherGroup" style="display:none;">
+          <label class="form-label">機器名（手入力）</label>
+          <input type="text" id="inspOther" placeholder="機器名を入力" style="width:150px;">
         </div>
         <!-- 測定日: CY CUT -1日自動設定 -->
         <!-- 担当者: MH LEE 固定 -->
@@ -1285,9 +1289,8 @@ async function stampAllPhotos(){
 
 // ── 検査機器 その他 처리 ──
 function toggleInspOther(val){
-  const el=document.getElementById('inspOther');
-  if(!el)return;
-  el.style.display=val==='その他'?'inline-block':'none';
+  const grp=document.getElementById('inspOtherGroup');
+  if(grp) grp.style.display=val==='その他'?'flex':'none';
 }
 function updateInspOther(val){
   // 입력값이 보고서에 반영됨 (generatePDF에서 직접 읽음)
