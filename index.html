@@ -212,7 +212,12 @@ input[type="date"]{color-scheme:dark;}
   <div class="card" id="card4">
     <div class="card-title"><span class="badge badge-step">STEP 4</span> 写真フォルダ選択・AI分類</div>
     <div class="card-body">
-      <!-- API KEY 内蔵済み -->
+      <div class="form-row" style="margin-bottom:10px;">
+        <div class="form-group">
+          <label class="form-label">API KEY</label>
+          <input type="text" id="apiKey" placeholder="sk-ant-..." style="width:260px;font-family:monospace;" oninput="saveApiKey(this.value)">
+        </div>
+      </div>
       <p style="color:var(--text2);font-size:12px;margin-bottom:10px;">PHOTOフォルダ全体を選択してください。選択したI/V番号の <strong>_RR</strong> フォルダ内の写真を表示します。</p>
       <label class="btn btn-ghost" style="cursor:pointer;">
         📂 PHOTOフォルダ選択
@@ -304,7 +309,6 @@ input[type="date"]{color-scheme:dark;}
 </div>
 
 <script>
-const LEENAI_API_KEY='sk-ant-api03-MncOLPfYOKjkvKY6zFw4VoFs3l9Q0rG5eWtlqINGi5WiGUbUj9JHkxp0-GR5VbPGhD9m0VtarGJYDe0ZW1w-FP9PAgAA';
 const CLIENT_ID='f071a165-5e9b-44bf-b6a1-baba654524db';
 const TENANT_ID='a56988ff-c2b8-4df8-9727-889ad4205198';
 const DV_URL='https://orgde512c6f.crm7.dynamics.com';
@@ -850,7 +854,8 @@ function updateSelectionStatus(){
 }
 
 async function runOCROnSelected(){
-  const apiKey=LEENAI_API_KEY;
+  const apiKey=document.getElementById('apiKey')?.value?.trim()||'';
+  if(!apiKey){alert('API KEYを入力してください。');return;}
 
   const targets=selState.filter(s=>s.category);
   if(!targets.length){alert('写真を分類してください。');return;}
@@ -1313,8 +1318,8 @@ function updateInspOther(val){
 function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
 
 // ── API KEY 永続化 ──
-function saveApiKey(val){} // API KEY 내장으로 불필요
-function loadApiKey(){} // API KEY 내장으로 불필요
+function saveApiKey(val){if(val.trim())localStorage.setItem('leenai_rr_apikey',val.trim());}
+function loadApiKey(){const saved=localStorage.getItem('leenai_rr_apikey')||'';const el=document.getElementById('apiKey');if(el&&saved)el.value=saved;}
 
 window.addEventListener('load',()=>{handleCallback();loadApiKey();});
 </script>
