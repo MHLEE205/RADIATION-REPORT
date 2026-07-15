@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v4.2</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v4.4</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -128,7 +128,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v4.2</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v4.4</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -561,7 +561,9 @@ async function selectIV(bkg,reg,pol,sc,tr){
     document.getElementById('infoNw').textContent=S.selectedIV.nwMT+' MT';
     document.getElementById('infoPod').textContent=S.selectedIV.pod;
     document.getElementById('infoItem').textContent=S.selectedIV.item;
-    document.getElementById('measDate').value=new Date().toISOString().split('T')[0];
+    // 測定日 = CY CUT -1日 (なければ今日)
+    const autoMeasDate=getCyCutMinusOne(bkg.cr49f_cy_cut?bkg.cr49f_cy_cut.split('T')[0]:'') || new Date().toISOString().split('T')[0];
+    document.getElementById('measDate').value=autoMeasDate;
 
     hideLoading();
     document.getElementById('card3').classList.add('active');
@@ -1206,9 +1208,13 @@ h1{font-size:15pt;font-weight:700;text-align:center;margin-bottom:10px;letter-sp
 // ── 写真に日付スタンプを追加 (Canvas) ──
 function getCyCutMinusOne(cyCut){
   if(!cyCut)return '';
-  const d=new Date(cyCut+'T00:00:00');
-  d.setDate(d.getDate()-1);
-  return d.toISOString().split('T')[0];
+  // 'YYYY-MM-DD' 문자열을 직접 분해해서 timezone 오류 방지
+  const [y,m,d]=cyCut.split('-').map(Number);
+  const dt=new Date(y,m-1,d-1);  // month는 0-indexed, day-1로 하루 전
+  const yy=dt.getFullYear();
+  const mm=String(dt.getMonth()+1).padStart(2,'0');
+  const dd=String(dt.getDate()).padStart(2,'0');
+  return `${yy}-${mm}-${dd}`;
 }
 
 async function addDateStamp(b64, dateStr){
@@ -1229,17 +1235,27 @@ async function addDateStamp(b64, dateStr){
       }
       const ctx=canvas.getContext('2d');
       if(isLandscape){
-        // 90도 시계방향 회전 적용
+        // 回転前に元の画像の日付領域(下部)を黒く潰す
+        // 一時canvasで元画像を描画して下部を塗りつぶす
+        const tmpCanvas=document.createElement('canvas');
+        tmpCanvas.width=img.width; tmpCanvas.height=img.height;
+        const tmpCtx=tmpCanvas.getContext('2d');
+        tmpCtx.drawImage(img,0,0);
+        // 元の日付が写っている下部エリアを黒塗り (下部10%)
+        const coverH=Math.round(img.height*0.10);
+        tmpCtx.fillStyle='rgba(0,0,0,0.9)';
+        tmpCtx.fillRect(0,img.height-coverH,img.width,coverH);
+        // 90度時計回り回転して描画
         ctx.save();
-        ctx.translate(canvas.width, 0);
+        ctx.translate(canvas.width,0);
         ctx.rotate(Math.PI/2);
-        ctx.drawImage(img, 0, 0);
+        ctx.drawImage(tmpCanvas,0,0);
         ctx.restore();
       } else {
-        ctx.drawImage(img, 0, 0);
+        ctx.drawImage(img,0,0);
       }
-      // 날짜 스탬프
-      const fs=Math.max(11,Math.round(drawH*0.028));
+      // 新しい日付スタンプ (セロ/가로 共通 — 불투명 박스)
+      const fs=Math.max(11,Math.round(canvas.height*0.028));
       ctx.font=`bold ${fs}px Arial`;
       const pad=Math.round(fs*0.4);
       const tw=ctx.measureText(dateStr).width;
