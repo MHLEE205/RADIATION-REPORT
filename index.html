@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v3.7</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v3.9</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -128,7 +128,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v3.7</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v3.9</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -510,7 +510,7 @@ async function selectIV(bkg,reg,pol,sc,tr){
   showLoading('選択I/V詳細情報取得中...');
   try{
     // コンテナ情報（積載量・品目）
-    const ctData=await dvGet(`crcf9_container_informations?$filter=_crcf9_booking_id_value eq ${bkg.cr49f_bookingid}&$select=crcf9_n_w&$top=100`);
+    const ctData=await dvGet(`crcf9_container_informations?$filter=_crcf9_booking_id_value eq ${bkg.cr49f_bookingid}&$select=crcf9_n_w,_crcf9_item_id_value&$top=100`);
     let totalNw=0;
     (ctData.value||[]).forEach(ct=>{totalNw+=(ct.crcf9_n_w||0);});
 
@@ -965,11 +965,11 @@ function calcResults(){
   const avg=arr=>{const v=arr.filter(x=>x!==null&&!isNaN(x));return v.length?(v.reduce((a,b)=>a+b,0)/v.length):null;};
   const fmtN=v=>v===null?'—':v.toFixed(4)+' μSv/h';
   const a=avg(S.values.bg);const m=avg(S.values.m1);const b=avg(S.values.sf);
-  const ratio=(a&&b)?b/a:null;const verdict=ratio===null?'—':ratio<=0.3?'合格':'不合格';
+  const ratio=(a&&b)?b/a:null;const verdict=ratio===null?'—':ratio<=1.0?'合格':'不合格';
   document.getElementById('avgA').textContent=fmtN(a);
   document.getElementById('avgM1').textContent=fmtN(m);
   document.getElementById('avgB').textContent=fmtN(b);
-  document.getElementById('ratio').textContent=ratio===null?'—':ratio.toFixed(9);
+  document.getElementById('ratio').textContent=ratio===null?'—':ratio.toFixed(1);
   const vEl=document.getElementById('verdict');vEl.textContent=verdict;
   vEl.className='result-val '+(verdict==='合格'?'ok':verdict==='不合格'?'fail':'');
 }
@@ -993,7 +993,7 @@ function generatePDF(){
   const avgM1=avg(S.values.m1);
   const avgB=avg(S.values.sf);
   const ratio=(avgA&&avgB)?avgB/avgA:null;
-  const verdict=ratio===null?'':ratio<=0.3?'합격':'불합격';
+  const verdict=ratio===null?'':ratio<=1.0?'합격':'불합격';
   const verdictColor=verdict==='합격'?'#16a34a':verdict==='불합격'?'#dc2626':'#111';
   const ivNo=iv.ivNo&&iv.ivNo!=='—'?iv.ivNo:'REPORT';
 
@@ -1095,8 +1095,8 @@ h1{font-size:15pt;font-weight:700;text-align:center;margin-bottom:10px;letter-sp
   <tr>
     <td class="val">${tool}</td>
     <td class="val">${meas}</td>
-    <td class="val">0.3</td>
-    <td class="val">${ratio!==null?ratio.toFixed(9):''}</td>
+    <td class="val">1.0</td>
+    <td class="val">${ratio!==null?ratio.toFixed(1):''}</td>
     <td class="verdict">${verdict}</td>
   </tr>
   <!-- 배경 : 빈 여백 행 + 섹션헤더 + 지점헤더 + 수치 -->
@@ -1277,6 +1277,10 @@ async function stampAllPhotos(){
   let secTotal=startH*3600+startM*60+Math.floor(Math.random()*60);
   const targets=selState.filter(s=>s.category);
   for(const item of targets){
+    // b64が未取得の場合は変換してから処理
+    if(!item.b64 && item.file?.file){
+      try{ item.b64=await fileToB64(item.file.file); }catch(e){ continue; }
+    }
     if(!item.b64)continue;
     const h=Math.floor(secTotal/3600).toString().padStart(2,'0');
     const m=Math.floor((secTotal%3600)/60).toString().padStart(2,'0');
