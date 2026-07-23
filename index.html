@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v5.3</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v5.4</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -128,7 +128,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v5.3</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v5.4</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -302,6 +302,7 @@ input[type="date"]{color-scheme:dark;}
     <div class="card-body">
       <p style="color:var(--text2);font-size:12px;margin-bottom:12px;">韓国の放射性物質簡易測定結果様式を印刷プレビューで開きます。ブラウザの印刷機能でPDF保存してください。</p>
       <button class="btn btn-ok" onclick="generatePDF()">🖨️ 印刷プレビュー（PDF保存）</button>
+      <button class="btn btn-primary" onclick="generateWord()" style="margin-left:8px;">📄 Word ダウンロード</button>
     </div>
   </div>
 
@@ -1313,6 +1314,247 @@ function toggleInspOther(val){
 }
 function updateInspOther(val){
   // 입력값이 보고서에 반영됨 (generatePDF에서 직접 읽음)
+}
+
+
+// ══════════════════════════════════════════════════
+// Word (DOCX) 生成 — COTECNA方式 (Raw XML + ZIP)
+// ══════════════════════════════════════════════════
+
+function xmlEsc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+function b64ToUint8(b64){const b=atob(b64),a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a;}
+
+function makeRrZip(docXml,imgRels){
+  const enc=new TextEncoder();
+  const files={};
+  const relEntries=[];
+
+  // 이미지 파일 임베드
+  for(const[rid,{name,b64,type}]of Object.entries(imgRels)){
+    files[`word/media/${name}`]=b64ToUint8(b64);
+    relEntries.push(`<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${name}"/>`);
+  }
+
+  // A4 페이지 설정 (11906×16838 twips = 210×297mm)
+  // 여백: top=567(10mm), right=720(12.7mm), bottom=567, left=720
+  const sectPr=`<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="567" w:right="720" w:bottom="567" w:left="720"/></w:sectPr>`;
+
+  const docRels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>
+${relEntries.join('')}
+</Relationships>`;
+
+  const contentTypes=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Default Extension="jpeg" ContentType="image/jpeg"/>
+<Default Extension="jpg" ContentType="image/jpeg"/>
+<Default Extension="png" ContentType="image/png"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
+</Types>`;
+
+  const docXmlFull=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+  xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+  xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+  xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+<w:body>${docXml}${sectPr}</w:body></w:document>`;
+
+  const stylesXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:docDefaults><w:rPrDefault><w:rPr>
+<w:rFonts w:ascii="Malgun Gothic" w:hAnsi="Malgun Gothic" w:cs="Malgun Gothic"/>
+<w:sz w:val="18"/></w:rPr></w:rPrDefault></w:docDefaults></w:styles>`;
+
+  files['[Content_Types].xml']=enc.encode(contentTypes);
+  files['_rels/.rels']=enc.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
+  files['word/document.xml']=enc.encode(docXmlFull);
+  files['word/_rels/document.xml.rels']=enc.encode(docRels);
+  files['word/styles.xml']=enc.encode(stylesXml);
+  files['word/settings.xml']=enc.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"></w:settings>`);
+
+  return makeZipStore(Object.entries(files));
+}
+
+function makeZipStore(files){
+  function crc32(d){let c=0xFFFFFFFF;for(const b of d){c^=b;for(let j=0;j<8;j++)c=c&1?(c>>>1)^0xEDB88320:(c>>>1);}return(c^0xFFFFFFFF)>>>0;}
+  function u16(n){return new Uint8Array([n&0xFF,(n>>8)&0xFF]);}
+  function u32(n){return new Uint8Array([n&0xFF,(n>>8)&0xFF,(n>>16)&0xFF,(n>>24)&0xFF]);}
+  function cat(...a){const t=new Uint8Array(a.reduce((s,x)=>s+x.length,0));let p=0;for(const x of a){t.set(x,p);p+=x.length;}return t;}
+  const lhs=[],cds=[];let off=0;
+  for(const[name,data]of files){
+    const nb=new TextEncoder().encode(name),crc=crc32(data),sz=data.length;
+    const lh=cat(new Uint8Array([0x50,0x4B,0x03,0x04]),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(sz),u32(sz),u16(nb.length),u16(0),nb,data);
+    const cd=cat(new Uint8Array([0x50,0x4B,0x01,0x02]),u16(20),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(sz),u32(sz),u16(nb.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(off),nb);
+    lhs.push(lh);cds.push(cd);off+=lh.length;
+  }
+  const cdb=cat(...cds);
+  const eocd=cat(new Uint8Array([0x50,0x4B,0x05,0x06]),u16(0),u16(0),u16(files.length),u16(files.length),u32(cdb.length),u32(off),u16(0));
+  return cat(...lhs,cdb,eocd);
+}
+
+// Word用テーブルセル生成
+function wTc(text,opts={}){
+  const {bold=false,center=false,shade=false,colspan=1,w=null,fs=18,vmerge=null}=opts;
+  const bTag=bold?'<w:b/>':'';
+  const jc=center?'<w:jc w:val="center"/>':'';
+  const shd=shade?'<w:shd w:val="clear" w:color="auto" w:fill="DCE6F1"/>'  :'';
+  const cspan=colspan>1?`<w:gridSpan w:val="${colspan}"/>`:'';
+  const wTag=w?`<w:tcW w:w="${w}" w:type="dxa"/>`:'';
+  const vm=vmerge?`<w:vMerge w:val="${vmerge}"/>`:'';
+  const vmCont=vmerge==='continue'?'<w:vMerge/>':'';
+  return `<w:tc><w:tcPr>${wTag}${cspan}${shd}${vm||vmCont}<w:tcBorders><w:top w:val="single" w:sz="4" w:color="555555"/><w:left w:val="single" w:sz="4" w:color="555555"/><w:bottom w:val="single" w:sz="4" w:color="555555"/><w:right w:val="single" w:sz="4" w:color="555555"/></w:tcBorders></w:tcPr><w:p><w:pPr>${jc}<w:spacing w:before="40" w:after="40"/></w:pPr><w:r><w:rPr>${bTag}<w:sz w:val="${fs}"/></w:rPr><w:t xml:space="preserve">${xmlEsc(text)}</w:t></w:r></w:p></w:tc>`;
+}
+
+function wTr(...cells){return `<w:tr>${cells.join('')}</w:tr>`;}
+
+// 이미지 셀 생성 (Word Drawing)
+function wImgTc(rid,widthEmu,heightEmu,label,valStr){
+  const drawing=rid?`<w:r><w:drawing><wp:inline><wp:extent cx="${widthEmu}" cy="${heightEmu}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="${Math.floor(Math.random()*9000)+1000}" name="img"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="0" name="img"/><pic:cNvPicPr><a:picLocks noChangeAspect="1"/></pic:cNvPicPr></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${widthEmu}" cy="${heightEmu}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`:'<w:r><w:t>No Photo</w:t></w:r>';
+  return `<w:tc><w:tcPr><w:tcBorders><w:top w:val="single" w:sz="4" w:color="555555"/><w:left w:val="single" w:sz="4" w:color="555555"/><w:bottom w:val="single" w:sz="4" w:color="555555"/><w:right w:val="single" w:sz="4" w:color="555555"/></w:tcBorders></w:tcPr>
+    <w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="40" w:after="40"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/><w:b/></w:rPr><w:t>${xmlEsc(label)}</w:t></w:r></w:p>
+    <w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="20" w:after="20"/></w:pPr><w:r><w:rPr><w:sz w:val="15"/></w:rPr><w:t>&lt;측정값 : ${xmlEsc(valStr)}&gt;</w:t></w:r></w:p>
+    <w:p><w:pPr><w:jc w:val="center"/></w:pPr>${drawing}</w:p>
+  </w:tc>`;
+}
+
+async function generateWord(){
+  const iv=S.selectedIV||{};
+  const inspEl=document.getElementById('inspTool');
+  const tool=inspEl.value==='その他'?(document.getElementById('inspOther')?.value||'その他'):inspEl.value;
+  const meas=getCyCutMinusOne(iv.cyCut||'') || new Date().toISOString().split('T')[0];
+  const staff='MH LEE';
+  const avg=arr=>{const v=arr.filter(x=>x!==null&&!isNaN(x));return v.length?(v.reduce((a,b)=>a+b,0)/v.length):null;};
+  const fmtV=v=>(v===null||v===undefined||isNaN(v))?'':Number(v).toFixed(2);
+  const avgA=avg(S.values.bg); const avgM1=avg(S.values.m1); const avgB=avg(S.values.sf);
+  const ratio=(avgA&&avgB)?avgB/avgA:null;
+  const verdict=ratio===null?'':ratio<=1.0?'합격':'불합격';
+  const ivNo=iv.ivNo&&iv.ivNo!=='—'?iv.ivNo:'REPORT';
+
+  showLoading('Word生成中...');
+
+  // 이미지 등록
+  const imgRels={};
+  let ridCounter=10;
+  function regImg(b64,key){
+    if(!b64)return null;
+    const rid=`rId${ridCounter++}`;
+    imgRels[rid]={name:`${key}.jpg`,b64,type:'image/jpeg'};
+    return rid;
+  }
+
+  // 사진 크기 (A4 셀 기준)
+  // 4열 테이블: 전체 폭 10466 twips, 열당 2616 twips
+  // 1 twip = 635 EMU → 2616 twips = 1,660,560 EMU
+  const imgW=1660560; // EMU (≈58mm)
+  const imgH=2000000; // EMU (≈70mm)
+
+  // 사진 rid 등록
+  const bgRids=[0,1,2,3].map(i=>regImg(S.photos.bg[i]?.b64,`bg${i}`));
+  const m1Rids=[0,1,2,3].map(i=>regImg(S.photos.m1[i]?.b64,`m1${i}`));
+  const sfRids=[0,1,2,3].map(i=>regImg(S.photos.sf[i]?.b64,`sf${i}`));
+
+  const fmtVal=(key,i)=>{const v=S.values[key][i];return (v!==null&&v!==undefined&&!isNaN(v))?`${Number(v).toFixed(2)} μSv/h`:'—';};
+
+  // 전체 테이블 폭 (마진 포함): 11906-720-720=10466 twips
+  const TW=10466;
+  // 왼쪽 카테고리 열: 700, 나머지 5열: (10466-700)/5=1953
+  const CW0=700; const CW=Math.floor((TW-CW0)/5);
+
+  // ── Page 1: 수치 테이블 ──
+  const tblAttr=`<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/><w:tblBorders><w:insideH w:val="single" w:sz="4" w:color="555555"/><w:insideV w:val="single" w:sz="4" w:color="555555"/></w:tblBorders></w:tblPr><w:tblGrid>${'<w:gridCol/>'.repeat(6)}</w:tblGrid>`;
+
+  const p1=`
+  <w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="80" w:after="80"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t>방사성물질 간이측정결과</w:t></w:r></w:p>
+  ${tblAttr}
+  ${wTr(wTc('업체 정보',{bold:true,center:true,shade:true,w:CW0}),wTc('수입업체명',{bold:true,center:true,shade:true,w:CW}),wTc('수출업체명',{bold:true,center:true,shade:true,w:CW}),wTc('수출업체 주소',{bold:true,center:true,shade:true,w:CW*2,colspan:2}),wTc('폐기물 품목',{bold:true,center:true,shade:true,w:CW}))}
+  ${wTr(wTc('',{w:CW0}),wTc(iv.buyer||'',{w:CW}),wTc('LEENEAR CORPORATION',{w:CW}),wTc('VORT SUIDOBASHI3 5FL, 2-8-11 KANDASARUGAKUCHO, CHIYODA, TOKYO, JAPAN, 101-0064',{w:CW*2,colspan:2,fs:15}),wTc(iv.item||'',{w:CW}))}
+  ${wTr(wTc('선적 정보',{bold:true,center:true,shade:true,w:CW0}),wTc('선박명',{bold:true,center:true,shade:true,w:CW}),wTc('선적항(일본)',{bold:true,center:true,shade:true,w:CW}),wTc('선적일 입항(예정)일',{bold:true,center:true,shade:true,w:CW}),wTc('선적량(톤)',{bold:true,center:true,shade:true,w:CW}),wTc('입항항구(한국)',{bold:true,center:true,shade:true,w:CW}))}
+  ${wTr(wTc('',{w:CW0}),wTc(iv.vessel||'',{w:CW}),wTc(iv.pol||'',{center:true,w:CW}),wTc(iv.blDate||'',{center:true,w:CW}),wTc(iv.nwMT||'',{center:true,w:CW}),wTc(iv.pod||'',{center:true,w:CW}))}
+  ${wTr(wTc('검사 결과',{bold:true,center:true,shade:true,w:CW0}),wTc('검사도구',{bold:true,center:true,shade:true,w:CW}),wTc('측정일자',{bold:true,center:true,shade:true,w:CW}),wTc('기준',{bold:true,center:true,shade:true,w:CW}),wTc('방사선 증가율(b/a)',{bold:true,center:true,shade:true,w:CW}),wTc('판정',{bold:true,center:true,shade:true,w:CW}))}
+  ${wTr(wTc('',{w:CW0}),wTc(tool,{center:true,w:CW}),wTc(meas,{center:true,w:CW}),wTc('0.3',{center:true,w:CW}),wTc(ratio!==null?ratio.toFixed(1):'',{center:true,w:CW}),wTc(verdict,{center:true,bold:true,w:CW}))}
+  ${wTr(wTc('',{w:CW0}),wTc('배경(폐기물로부터 10M 이상 이격) 측정결과（μSv/h）',{bold:false,center:true,w:CW*5,colspan:5}))}
+  ${wTr(wTc('',{w:CW0}),wTc('지점 1',{center:true,w:CW}),wTc('지점 2',{center:true,w:CW}),wTc('지점 3',{center:true,w:CW}),wTc('지점 4',{center:true,w:CW}),wTc('평균(a)',{center:true,bold:true,w:CW}))}
+  ${wTr(wTc('',{w:CW0}),wTc(fmtV(S.values.bg[0]),{center:true,w:CW}),wTc(fmtV(S.values.bg[1]),{center:true,w:CW}),wTc(fmtV(S.values.bg[2]),{center:true,w:CW}),wTc(fmtV(S.values.bg[3]),{center:true,w:CW}),wTc(fmtV(avgA),{center:true,bold:true,w:CW}))}
+  ${wTr(wTc('',{w:CW0}),wTc('폐기물(1M 이격) 측정결과（μSv/h）',{center:true,w:CW*5,colspan:5}))}
+  ${wTr(wTc('',{w:CW0}),wTc('지점 1',{center:true,w:CW}),wTc('지점 2',{center:true,w:CW}),wTc('지점 3',{center:true,w:CW}),wTc('지점 4',{center:true,w:CW}),wTc('평균',{center:true,bold:true,w:CW}))}
+  ${wTr(wTc('',{w:CW0}),wTc(fmtV(S.values.m1[0]),{center:true,w:CW}),wTc(fmtV(S.values.m1[1]),{center:true,w:CW}),wTc(fmtV(S.values.m1[2]),{center:true,w:CW}),wTc(fmtV(S.values.m1[3]),{center:true,w:CW}),wTc(fmtV(avgM1),{center:true,bold:true,w:CW}))}
+  ${wTr(wTc('',{w:CW0}),wTc('폐기물(표면) 측정결과（μSv/h）',{center:true,w:CW*5,colspan:5}))}
+  ${wTr(wTc('',{w:CW0}),wTc('지점 1',{center:true,w:CW}),wTc('지점 2',{center:true,w:CW}),wTc('지점 3',{center:true,w:CW}),wTc('지점 4',{center:true,w:CW}),wTc('평균(b)',{center:true,bold:true,w:CW}))}
+  ${wTr(wTc('',{w:CW0}),wTc(fmtV(S.values.sf[0]),{center:true,w:CW}),wTc(fmtV(S.values.sf[1]),{center:true,w:CW}),wTc(fmtV(S.values.sf[2]),{center:true,w:CW}),wTc(fmtV(S.values.sf[3]),{center:true,w:CW}),wTc(fmtV(avgB),{center:true,bold:true,w:CW}))}
+  </w:tbl>
+  <w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/><w:tblBorders><w:insideH w:val="single" w:sz="4" w:color="555555"/><w:insideV w:val="single" w:sz="4" w:color="555555"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol/><w:gridCol/><w:gridCol/><w:gridCol/><w:gridCol/></w:tblGrid>
+  ${wTr(wTc('측정업체명 :',{bold:true,w:1400}),wTc('LEENEAR CORPORATION',{w:3600}),wTc('담당자 :',{bold:true,center:true,w:1200}),wTc(staff,{w:2000}),wTc('(印)',{center:true,w:1266}))}
+  </w:tbl>
+  <w:p><w:pPr><w:spacing w:before="60" w:after="20"/></w:pPr><w:r><w:rPr><w:sz w:val="14"/><w:color w:val="888888"/></w:rPr><w:t>✦ Powered by LEENAI Automation System</w:t></w:r></w:p>
+  <w:p><w:r><w:br w:type="page"/></w:r></w:p>`;
+
+  // 사진 테이블 폭: 각 열 10466/4=2616 twips
+  const PC=Math.floor(TW/4);
+
+  // ── Page 2: 배경4 + 1m4 ──
+  const tblPic=`<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/><w:tblBorders><w:insideH w:val="single" w:sz="4" w:color="555555"/><w:insideV w:val="single" w:sz="4" w:color="555555"/></w:tblBorders></w:tblPr><w:tblGrid>${'<w:gridCol/>'.repeat(4)}</w:tblGrid>`;
+
+  const p2=`
+  <w:p><w:pPr><w:spacing w:before="60" w:after="60"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="22"/></w:rPr><w:t>＜측정 사진＞</w:t></w:r></w:p>
+  ${tblPic}
+  <w:tr>${[0,1,2,3].map(i=>wImgTc(bgRids[i],imgW,imgH,`배경(10m이격)${i+1}`,fmtVal('bg',i))).join('')}</w:tr>
+  </w:tbl>
+  <w:p><w:pPr><w:spacing w:before="80" w:after="40"/></w:pPr></w:p>
+  ${tblPic}
+  <w:tr>${[0,1,2,3].map(i=>wImgTc(m1Rids[i],imgW,imgH,`폐기물(1m이격)${i+1}`,fmtVal('m1',i))).join('')}</w:tr>
+  </w:tbl>
+  <w:p><w:pPr><w:spacing w:before="60" w:after="20"/></w:pPr><w:r><w:rPr><w:sz w:val="14"/><w:color w:val="888888"/></w:rPr><w:t>✦ Powered by LEENAI Automation System</w:t></w:r></w:p>
+  <w:p><w:r><w:br w:type="page"/></w:r></w:p>`;
+
+  // ── Page 3: 표면4 + 안내문 ──
+  const noticeLines=[
+    '【방사능물질 간이측정결과 안내】',
+    '❖수출업체',
+    '1. 폐기물의 한국 수출시 "방사성물질 간이측정결과"는 반드시 본 양식에 따라 작성할 것',
+    '　（포괄 수입 허가(신고)의 경우 통관 시마다 별도 작성）',
+    '2. 사진은 촬영 일시 확인이 가능해야함',
+    '3. 배경（10m이격）/폐기물（1m이격）/폐기물（표면）의 측정방향은 각 지점별로 동일하여야 함',
+    '❖수입업체',
+    '1. "방사성물질 간이측정결과"는 수출입폐기물포털시스템에 통관 시마다 제출',
+    '2. 상기 수출업체 조치사항이 명확하지 않거나, 방사성물질의 오염이 의심될 경우 서류 보완 또는 반려',
+    '❋폐기물 표면에 가까워질수록 평균 방사선 값이 증가하거나,',
+    '　폐기물 표면에서 측정된 방사선 값이 환경방사선량 이상인 경우',
+  ].map(l=>`<w:p><w:pPr><w:spacing w:before="30" w:after="30"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/></w:rPr><w:t xml:space="preserve">${xmlEsc(l)}</w:t></w:r></w:p>`).join('');
+
+  const p3=`
+  ${tblPic}
+  <w:tr>${[0,1,2,3].map(i=>wImgTc(sfRids[i],imgW,imgH,`폐기물(표면)${i+1}`,fmtVal('sf',i))).join('')}</w:tr>
+  </w:tbl>
+  <w:p><w:pPr><w:spacing w:before="120" w:after="60"/></w:pPr></w:p>
+  <w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="555555"/><w:left w:val="single" w:sz="4" w:color="555555"/><w:bottom w:val="single" w:sz="4" w:color="555555"/><w:right w:val="single" w:sz="4" w:color="555555"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol/></w:tblGrid>
+  <w:tr><w:tc><w:tcPr><w:tcW w:w="${TW}" w:type="dxa"/></w:tcPr>${noticeLines}</w:tc></w:tr>
+  </w:tbl>
+  <w:p><w:pPr><w:spacing w:before="60" w:after="20"/></w:pPr><w:r><w:rPr><w:sz w:val="14"/><w:color w:val="888888"/></w:rPr><w:t>✦ Powered by LEENAI Automation System</w:t></w:r></w:p>`;
+
+  const docXml=p1+p2+p3;
+
+  try{
+    const buf=makeRrZip(docXml,imgRels);
+    const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=`${ivNo}_RR.docx`; a.click();
+    URL.revokeObjectURL(url);
+    hideLoading();
+    log(`Word生成完了: ${ivNo}_RR.docx`,'ok');
+  }catch(e){
+    hideLoading();
+    alert('Word生成エラー: '+e.message);
+    console.error(e);
+  }
 }
 
 function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
