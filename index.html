@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v5.4</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v5.5</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -14,6 +14,11 @@
   --bg:#f0f2f5;--surface:#ffffff;--surface2:#f8f9fc;--border:#d1d5db;
   --accent:#2563eb;--ok:#16a34a;--warn:#d97706;--error:#dc2626;--info:#0284c7;
   --text:#111827;--text2:#6b7280;--text3:#9ca3af;
+}
+[data-theme="leenai"]{
+  --bg:#FAFDF7;--surface:#ffffff;--surface2:#F2F9EE;--surface3:#E8F5E0;
+  --border:#D0E8C0;--text:#1A3A0E;--text2:#4A6A3A;--text3:#8AAA80;
+  --accent:#2D5A1E;--ok:#2D5A1E;--warn:#d97706;--error:#dc2626;--info:#2E72C8;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Segoe UI','Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:13px;}
@@ -128,7 +133,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v5.4</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v5.5</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -333,14 +338,20 @@ const S={
   document.documentElement.setAttribute('data-theme',saved);
   document.addEventListener('DOMContentLoaded',()=>updateThemeBtn(saved));
 })();
+function updateThemeBtn(t){
+  const b=document.getElementById('themeBtn');
+  if(!b) return;
+  const labels={dark:'🌙 ダーク',light:'☀️ ライト',leenai:'🌿 LEENAI'};
+  b.textContent=labels[t]||'🌙 ダーク';
+}
 function toggleTheme(){
-  const cur=document.documentElement.getAttribute('data-theme');
-  const next=cur==='dark'?'light':'dark';
+  const current=document.documentElement.getAttribute('data-theme')||'dark';
+  const order=['dark','light','leenai'];
+  const next=order[(order.indexOf(current)+1)%order.length];
   document.documentElement.setAttribute('data-theme',next);
   localStorage.setItem('leenai_rr_theme',next);
   updateThemeBtn(next);
 }
-function updateThemeBtn(t){const b=document.getElementById('themeBtn');if(b)b.textContent=t==='dark'?'☀️ ライト':'🌙 ダーク';}
 
 // ── ローディング ──
 function showLoading(msg='処理中...'){document.getElementById('loadingOverlay').classList.add('show');document.getElementById('loadingMsg').textContent=msg;}
