@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja" data-theme="dark">
+<html lang="ja" data-theme="leenai">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,14 +11,19 @@
   --text:#e2e8f0;--text2:#8892a4;--text3:#4a5568;
 }
 [data-theme="light"]{
-  --bg:#f0f2f5;--surface:#ffffff;--surface2:#f8f9fc;--border:#d1d5db;
-  --accent:#2563eb;--ok:#16a34a;--warn:#d97706;--error:#dc2626;--info:#0284c7;
-  --text:#111827;--text2:#6b7280;--text3:#9ca3af;
+  --bg:#FAF9F8;--surface:#FFFFFF;--surface2:#F3F2F1;--surface3:#EDEBE9;
+  --border:#E1DFDD;--text:#201F1E;--text2:#605E5C;--text3:#A19F9D;
+  --accent:#0F6CBD;--ok:#107C41;--warn:#d97706;--error:#dc2626;--info:#2E72C8;
 }
 [data-theme="leenai"]{
-  --bg:#FAFDF7;--surface:#ffffff;--surface2:#F2F9EE;--surface3:#E8F5E0;
-  --border:#D0E8C0;--text:#1A3A0E;--text2:#4A6A3A;--text3:#8AAA80;
-  --accent:#2D5A1E;--ok:#2D5A1E;--warn:#d97706;--error:#dc2626;--info:#2E72C8;
+  --bg:#E9EEE8;--surface:#F4F5F7;--surface2:#E1E8E0;--surface3:#D5DFD3;
+  --border:#B9C7B7;--text:#1F2A22;--text2:#4F5E52;--text3:#6D7B71;
+  --accent:#2F6B45;--ok:#2F6B45;--warn:#d97706;--error:#dc2626;--info:#2E72C8;
+}
+[data-theme="focus"]{
+  --bg:#E7EAF0;--surface:#F4F5F7;--surface2:#DDE2EA;--surface3:#CFD6E2;
+  --border:#AEB8C8;--text:#202733;--text2:#515C6C;--text3:#697587;
+  --accent:#315F9E;--ok:#315F9E;--warn:#d97706;--error:#dc2626;--info:#2F7D6A;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Segoe UI','Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:13px;}
@@ -334,19 +339,19 @@ const S={
 
 // ── テーマ ──
 (function(){
-  const saved=localStorage.getItem('leenai_rr_theme')||'dark';
+  const saved=localStorage.getItem('leenai_rr_theme')||'leenai';
   document.documentElement.setAttribute('data-theme',saved);
   document.addEventListener('DOMContentLoaded',()=>updateThemeBtn(saved));
 })();
 function updateThemeBtn(t){
   const b=document.getElementById('themeBtn');
   if(!b) return;
-  const labels={dark:'🌙 ダーク',light:'☀️ ライト',leenai:'🌿 LEENAI'};
-  b.textContent=labels[t]||'🌙 ダーク';
+  const labels={dark:'🌙 ダーク',light:'☀️ ライト',leenai:'🌿 LEENAI',focus:'🎯 FOCUS'};
+  b.textContent=labels[t]||'🌿 LEENAI';
 }
 function toggleTheme(){
-  const current=document.documentElement.getAttribute('data-theme')||'dark';
-  const order=['dark','light','leenai'];
+  const current=document.documentElement.getAttribute('data-theme')||'leenai';
+  const order=['dark','light','leenai','focus'];
   const next=order[(order.indexOf(current)+1)%order.length];
   document.documentElement.setAttribute('data-theme',next);
   localStorage.setItem('leenai_rr_theme',next);
