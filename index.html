@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v5.5</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v5.6</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -132,7 +132,7 @@ input[type="date"]{color-scheme:dark;}
   <div style="font-size:40px;font-weight:800;letter-spacing:3px;color:var(--text);">LEEN<span style="color:var(--accent)">AI</span></div>
   <div style="font-size:11px;color:var(--accent);font-weight:700;letter-spacing:1px;">SYS-D-02</div>
   <div style="font-size:16px;color:var(--text);font-weight:700;">RR 放射性物質簡易測定結果ツール</div>
-  <div style="font-size:12px;color:var(--text2);">v5.5</div>
+  <div style="font-size:12px;color:var(--text2);">v5.6</div>
   <div style="width:48px;height:1px;background:var(--border);margin:12px 0;"></div>
   <div style="font-size:12px;color:var(--text3);text-align:center;line-height:1.8;">このツールを使用するには<br>COMPASSアカウントでのログインが必要です</div>
   <button onclick="startLogin()" style="margin-top:8px;background:var(--accent);color:#fff;border:none;padding:11px 32px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Segoe UI',sans-serif;display:inline-flex;align-items:center;gap:8px;">🔑 COMPASSログイン</button>
@@ -149,7 +149,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v5.5</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v5.6</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -970,7 +970,7 @@ function calcResults(){
   const avg=arr=>{const v=arr.filter(x=>x!==null&&!isNaN(x));return v.length?(v.reduce((a,b)=>a+b,0)/v.length):null;};
   const fmtN=v=>v===null?'—':v.toFixed(4)+' μSv/h';
   const a=avg(S.values.bg);const m=avg(S.values.m1);const b=avg(S.values.sf);
-  const ratio=(a&&b)?b/a:null;const verdict=ratio===null?'—':ratio<=1.0?'合格':'不合格';
+  const ratio=(a&&b)?b/a:null;const verdict=ratio===null?'—':ratio<=1.5?'合格':'不合格';
   document.getElementById('avgA').textContent=fmtN(a);
   document.getElementById('avgM1').textContent=fmtN(m);
   document.getElementById('avgB').textContent=fmtN(b);
@@ -1002,7 +1002,7 @@ function generatePDF(){
   const avgM1=avg(S.values.m1);
   const avgB=avg(S.values.sf);
   const ratio=(avgA&&avgB)?avgB/avgA:null;
-  const verdict=ratio===null?'':ratio<=1.0?'합격':'불합격';
+  const verdict=ratio===null?'':ratio<=1.5?'합격':'불합격';
   const verdictColor=verdict==='합격'?'#16a34a':verdict==='불합격'?'#dc2626':'#111';
   const ivNo=iv.ivNo&&iv.ivNo!=='—'?iv.ivNo:'REPORT';
 
@@ -1463,7 +1463,7 @@ async function generateWord(){
   const fmtV=v=>(v===null||v===undefined||isNaN(v))?'':Number(v).toFixed(2);
   const avgA=avg(S.values.bg); const avgM1=avg(S.values.m1); const avgB=avg(S.values.sf);
   const ratio=(avgA&&avgB)?avgB/avgA:null;
-  const verdict=ratio===null?'':ratio<=1.0?'합격':'불합격';
+  const verdict=ratio===null?'':ratio<=1.5?'합격':'불합격';
   const ivNo=iv.ivNo&&iv.ivNo!=='—'?iv.ivNo:'REPORT';
 
   showLoading('Word生成中...');
