@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v5.6</title>
+<title>LEENAI RR 放射性物質簡易測定結果ツール v5.7</title>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
@@ -132,7 +132,7 @@ input[type="date"]{color-scheme:dark;}
   <div style="font-size:40px;font-weight:800;letter-spacing:3px;color:var(--text);">LEEN<span style="color:var(--accent)">AI</span></div>
   <div style="font-size:11px;color:var(--accent);font-weight:700;letter-spacing:1px;">SYS-D-02</div>
   <div style="font-size:16px;color:var(--text);font-weight:700;">RR 放射性物質簡易測定結果ツール</div>
-  <div style="font-size:12px;color:var(--text2);">v5.6</div>
+  <div style="font-size:12px;color:var(--text2);">v5.7</div>
   <div style="width:48px;height:1px;background:var(--border);margin:12px 0;"></div>
   <div style="font-size:12px;color:var(--text3);text-align:center;line-height:1.8;">このツールを使用するには<br>COMPASSアカウントでのログインが必要です</div>
   <button onclick="startLogin()" style="margin-top:8px;background:var(--accent);color:#fff;border:none;padding:11px 32px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Segoe UI',sans-serif;display:inline-flex;align-items:center;gap:8px;">🔑 COMPASSログイン</button>
@@ -149,7 +149,7 @@ input[type="date"]{color-scheme:dark;}
 <header>
   <div class="logo">LEEN<span>AI</span></div>
   <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v5.6</div>
+  <div class="header-sub">RR 放射性物質簡易測定結果ツール v5.7</div>
   <div class="header-right">
     <span class="user-badge" id="userBadge"></span>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
@@ -997,7 +997,7 @@ function generatePDF(){
   // 担当者: MH LEE 固定
   const staff='MH LEE';
   const avg=arr=>{const v=arr.filter(x=>x!==null&&!isNaN(x));return v.length?(v.reduce((a,b)=>a+b,0)/v.length):null;};
-  const fmtV=v=>(v===null||v===undefined||isNaN(v))?'':Number(v).toFixed(2);
+  const fmtV=v=>(v===null||v===undefined||isNaN(v))?'':Number(v).toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
   const avgA=avg(S.values.bg);
   const avgM1=avg(S.values.m1);
   const avgB=avg(S.values.sf);
@@ -1008,7 +1008,7 @@ function generatePDF(){
 
   function photoCell(p,val,label){
     const src=p?.b64?`data:image/jpeg;base64,${p.b64}`:null;
-    const valStr=(val!==null&&val!==undefined&&!isNaN(val))?`${Number(val).toFixed(2)} μSv/h`:'—';
+    const valStr=(val!==null&&val!==undefined&&!isNaN(val))?`${Number(val).toFixed(3).replace(/0+$/,'').replace(/\.$/,'')} μSv/h`:'—';
     return `<td class="pc">
       <div class="plabel">${label}</div>
       <div class="pval">&lt;측정값 : ${valStr}&gt;</div>
@@ -1460,7 +1460,7 @@ async function generateWord(){
   const meas=getCyCutMinusOne(iv.cyCut||'') || new Date().toISOString().split('T')[0];
   const staff='MH LEE';
   const avg=arr=>{const v=arr.filter(x=>x!==null&&!isNaN(x));return v.length?(v.reduce((a,b)=>a+b,0)/v.length):null;};
-  const fmtV=v=>(v===null||v===undefined||isNaN(v))?'':Number(v).toFixed(2);
+  const fmtV=v=>(v===null||v===undefined||isNaN(v))?'':Number(v).toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
   const avgA=avg(S.values.bg); const avgM1=avg(S.values.m1); const avgB=avg(S.values.sf);
   const ratio=(avgA&&avgB)?avgB/avgA:null;
   const verdict=ratio===null?'':ratio<=1.5?'합격':'불합격';
@@ -1489,7 +1489,7 @@ async function generateWord(){
   const m1Rids=[0,1,2,3].map(i=>regImg(S.photos.m1[i]?.b64,`m1${i}`));
   const sfRids=[0,1,2,3].map(i=>regImg(S.photos.sf[i]?.b64,`sf${i}`));
 
-  const fmtVal=(key,i)=>{const v=S.values[key][i];return (v!==null&&v!==undefined&&!isNaN(v))?`${Number(v).toFixed(2)} μSv/h`:'—';};
+  const fmtVal=(key,i)=>{const v=S.values[key][i];return (v!==null&&v!==undefined&&!isNaN(v))?`${Number(v).toFixed(3).replace(/0+$/,'').replace(/\.$/,'')} μSv/h`:'—';};
 
   // 전체 테이블 폭 (마진 포함): 11906-720-720=10466 twips
   const TW=10466;
