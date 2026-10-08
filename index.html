@@ -1,42 +1,19 @@
 <!DOCTYPE html>
-<html lang="ja" data-theme="leenai">
+<html lang="ja" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEENAI RR 放射性物質簡易測定結果ツール v5.7</title>
+<link id="leenaiFavicon" rel="icon">
+<link rel="stylesheet" href="https://mhlee205.github.io/LEENAI_COMMON/v1/leenai-common.css">
+<script src="https://mhlee205.github.io/LEENAI_COMMON/v1/leenai-common.js"></script>
+<script>if(!window.LEENAI){document.addEventListener('DOMContentLoaded',function(){document.body.innerHTML='<div style="padding:40px;font-family:sans-serif">共通ファイルの読み込みに失敗しました。ページを再読み込みしてください。</div>';});}</script>
 <style>
-:root{
-  --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3350;
-  --accent:#4f8ef7;--ok:#22c55e;--warn:#f59e0b;--error:#ef4444;--info:#38bdf8;
-  --text:#e2e8f0;--text2:#8892a4;--text3:#4a5568;
-}
-[data-theme="light"]{
-  --bg:#FAF9F8;--surface:#FFFFFF;--surface2:#F3F2F1;--surface3:#EDEBE9;
-  --border:#E1DFDD;--text:#201F1E;--text2:#605E5C;--text3:#A19F9D;
-  --accent:#0F6CBD;--ok:#107C41;--warn:#d97706;--error:#dc2626;--info:#2E72C8;
-}
-[data-theme="leenai"]{
-  --bg:#E9EEE8;--surface:#F4F5F7;--surface2:#E1E8E0;--surface3:#D5DFD3;
-  --border:#B9C7B7;--text:#1F2A22;--text2:#4F5E52;--text3:#6D7B71;
-  --accent:#2F6B45;--ok:#2F6B45;--warn:#d97706;--error:#dc2626;--info:#2E72C8;
-}
-[data-theme="focus"]{
-  --bg:#E7EAF0;--surface:#F4F5F7;--surface2:#DDE2EA;--surface3:#CFD6E2;
-  --border:#AEB8C8;--text:#202733;--text2:#515C6C;--text3:#697587;
-  --accent:#315F9E;--ok:#315F9E;--warn:#d97706;--error:#dc2626;--info:#2F7D6A;
-}
+/* ── D-02 固有 CSS ── */
+:root{--error:#ef4444;}
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Segoe UI','Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:13px;}
-header{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;}
-.logo{font-size:17px;font-weight:700;letter-spacing:1px;}.logo span{color:var(--accent);}
-.badge-sys{background:var(--accent);color:#fff;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;}
-.header-sub{color:var(--text2);font-size:11px;background:var(--surface2);padding:2px 8px;border-radius:4px;}
-.header-right{margin-left:auto;display:flex;align-items:center;gap:8px;}
-.theme-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text2);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;}
-.theme-btn:hover{border-color:var(--accent);color:var(--text);}
-.user-badge{font-size:11px;color:var(--ok);background:rgba(34,197,94,.1);padding:3px 8px;border-radius:4px;display:none;}
+body{min-height:100vh;font-size:13px;}
 .main{max-width:960px;margin:0 auto;padding:20px 16px;display:flex;flex-direction:column;gap:14px;}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;transition:border-color .2s;}
+.card{background:var(--read);border:1px solid var(--border);border-radius:10px;overflow:hidden;transition:border-color .2s;}
 .card.active{border-color:var(--accent);}
 .card.done{border-color:var(--ok);opacity:.95;}
 .card-title{display:flex;align-items:center;gap:10px;padding:13px 18px;font-weight:600;font-size:13px;}
@@ -48,19 +25,19 @@ header{background:var(--surface);border-bottom:1px solid var(--border);padding:1
 .form-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;}
 .form-group{display:flex;flex-direction:column;gap:4px;}
 .form-label{font-size:11px;color:var(--text2);font-weight:500;}
-input[type="date"],input[type="text"],select{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;font-size:12px;outline:none;}
-input[type="date"]:focus,input[type="text"]:focus,select:focus{border-color:var(--accent);}
+input[type="date"],input[type="text"],input[type="password"],select{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;font-size:12px;outline:none;}
+input[type="date"]:focus,input[type="text"]:focus,input[type="password"]:focus,select:focus{border-color:var(--accent);}
 input[type="date"]{color-scheme:dark;}
 [data-theme="light"] input[type="date"]{color-scheme:light;}
 .btn{padding:7px 16px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:600;transition:opacity .15s;}
 .btn:hover{opacity:.85;}
 .btn:disabled{opacity:.4;cursor:not-allowed;}
-.btn-primary{background:var(--accent);color:#fff;}
+.btn-primary{background:var(--accent-btn);color:#fff;}
 .btn-ok{background:var(--ok);color:#fff;}
 .btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border);}
 .btn-sm{padding:4px 10px;font-size:11px;}
 .tbl{width:100%;border-collapse:collapse;font-size:12px;}
-.tbl th{background:var(--surface2);color:var(--text2);font-weight:600;padding:7px 10px;border-bottom:1px solid var(--border);text-align:left;}
+.tbl th{background:var(--frame);color:var(--text);font-weight:700;padding:7px 10px;border-bottom:1px solid var(--border);text-align:left;}
 .tbl td{padding:7px 10px;border-bottom:1px solid var(--border);}
 .tbl tr:last-child td{border-bottom:none;}
 .tbl tr.selected td{background:rgba(79,142,247,.1);}
@@ -92,15 +69,8 @@ input[type="date"]{color-scheme:dark;}
 .log-warn{color:var(--warn);}
 .log-err{color:var(--error);}
 .log-info{color:var(--info);}
-.loading-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999;align-items:center;justify-content:center;}
-.loading-overlay.show{display:flex;}
-.loading-box{background:var(--surface);border-radius:12px;padding:24px 36px;text-align:center;border:1px solid var(--border);}
-.spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px;}
-@keyframes spin{to{transform:rotate(360deg)}}
-.loading-msg{font-size:13px;color:var(--text2);}
 .progress-bar{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin:8px 0;}
 .progress-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .3s;}
-.powered{text-align:center;font-size:10px;color:var(--text3);padding:18px 0 10px;letter-spacing:.4px;}
 .set-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px;}
 .set-card{background:var(--surface2);border:2px solid var(--border);border-radius:8px;cursor:pointer;overflow:hidden;transition:border-color .2s;}
 .set-card:hover{border-color:var(--accent);}
@@ -128,46 +98,12 @@ input[type="date"]{color-scheme:dark;}
 </head>
 <body>
 
-<div id="loginGate" style="display:flex;position:fixed;inset:0;background:var(--bg);z-index:9999;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
-  <div style="font-size:40px;font-weight:800;letter-spacing:3px;color:var(--text);">LEEN<span style="color:var(--accent)">AI</span></div>
-  <div style="font-size:11px;color:var(--accent);font-weight:700;letter-spacing:1px;">SYS-D-02</div>
-  <div style="font-size:16px;color:var(--text);font-weight:700;">RR 放射性物質簡易測定結果ツール</div>
-  <div style="font-size:12px;color:var(--text2);">v5.7</div>
-  <div style="width:48px;height:1px;background:var(--border);margin:12px 0;"></div>
-  <div style="font-size:12px;color:var(--text3);text-align:center;line-height:1.8;">このツールを使用するには<br>COMPASSアカウントでのログインが必要です</div>
-  <button onclick="startLogin()" style="margin-top:8px;background:var(--accent);color:#fff;border:none;padding:11px 32px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Segoe UI',sans-serif;display:inline-flex;align-items:center;gap:8px;">🔑 COMPASSログイン</button>
-  <div id="gateStatus" style="font-size:11px;color:var(--text2);height:18px;"></div>
-</div>
-
-<div class="loading-overlay" id="loadingOverlay">
-  <div class="loading-box">
-    <div class="spinner"></div>
-    <div class="loading-msg" id="loadingMsg">処理中...</div>
-  </div>
-</div>
-
-<header>
-  <div class="logo">LEEN<span>AI</span></div>
-  <div class="badge-sys">SYS-D-02</div>
-  <div class="header-sub">RR 放射性物質簡易測定結果ツール v5.7</div>
-  <div class="header-right">
-    <span class="user-badge" id="userBadge"></span>
-    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ ライト</button>
-  </div>
-</header>
-
+<div id="app" style="display:none">
+<!-- ln-header は LEENAI が挿入 -->
 <div class="main">
 
-  <div class="card active" id="card1">
-    <div class="card-title"><span class="badge badge-step">STEP 1</span> COMPASSログイン (Dataverse)</div>
-    <div class="card-body">
-      <p style="color:var(--text2);font-size:12px;margin-bottom:12px;">Microsoft 365アカウントでCOMPASSにログインしてください。</p>
-      <button class="btn btn-primary" onclick="startLogin()">🔐 COMPASSログイン</button>
-    </div>
-  </div>
-
   <div class="card" id="card2">
-    <div class="card-title"><span class="badge badge-step">STEP 2</span> I/V番号選択（韓国向け）</div>
+    <div class="card-title"><span class="badge badge-step">STEP 1</span> I/V番号選択（韓国向け）</div>
     <div class="card-body">
       <div class="form-row">
         <div class="form-group">
@@ -199,7 +135,7 @@ input[type="date"]{color-scheme:dark;}
   </div>
 
   <div class="card" id="card3">
-    <div class="card-title"><span class="badge badge-step">STEP 3</span> 船積情報確認・補完入力</div>
+    <div class="card-title"><span class="badge badge-step">STEP 2</span> 船積情報確認・補完入力</div>
     <div class="card-body">
       <div class="info-grid" id="infoGrid">
         <div class="info-item"><div class="info-key">輸入業者名</div><div class="info-val" id="infoBuyer">—</div></div>
@@ -231,12 +167,12 @@ input[type="date"]{color-scheme:dark;}
   </div>
 
   <div class="card" id="card4">
-    <div class="card-title"><span class="badge badge-step">STEP 4</span> 写真フォルダ選択・AI分類</div>
+    <div class="card-title"><span class="badge badge-step">STEP 3</span> 写真フォルダ選択・AI分類</div>
     <div class="card-body">
       <div class="form-row" style="margin-bottom:10px;">
         <div class="form-group">
           <label class="form-label">API KEY</label>
-          <input type="text" id="apiKey" placeholder="sk-ant-..." style="width:260px;font-family:monospace;" oninput="saveApiKey(this.value)">
+          <input type="password" id="apiKey" placeholder="sk-ant-..." style="width:260px;font-family:monospace;" oninput="saveApiKey(this.value)">
         </div>
       </div>
       <p style="color:var(--text2);font-size:12px;margin-bottom:10px;">PHOTOフォルダ全体を選択してください。選択したI/V番号の <strong>_RR</strong> フォルダ内の写真を表示します。</p>
@@ -319,7 +255,7 @@ input[type="date"]{color-scheme:dark;}
   </div>
 
   <div class="card" id="card5">
-    <div class="card-title"><span class="badge badge-step">STEP 5</span> PDF生成・ダウンロード</div>
+    <div class="card-title"><span class="badge badge-step">STEP 4</span> PDF生成・ダウンロード</div>
     <div class="card-body">
       <p style="color:var(--text2);font-size:12px;margin-bottom:12px;">韓国の放射性物質簡易測定結果様式を印刷プレビューで開きます。ブラウザの印刷機能でPDF保存してください。</p>
       <button class="btn btn-ok" onclick="generatePDF()">🖨️ 印刷プレビュー（PDF保存）</button>
@@ -327,121 +263,55 @@ input[type="date"]{color-scheme:dark;}
     </div>
   </div>
 
-  <div class="powered">✦ Powered by LEENAI Automation System</div>
-</div>
+</div><!-- /main -->
+<!-- ln-footer は LEENAI が挿入 -->
+</div><!-- /app -->
 
 <script>
-const CLIENT_ID='f071a165-5e9b-44bf-b6a1-baba654524db';
-const TENANT_ID='a56988ff-c2b8-4df8-9727-889ad4205198';
 const DV_URL='https://orgde512c6f.crm7.dynamics.com';
-const DV_API=`${DV_URL}/api/data/v9.2`;
-const REDIRECT_URI='https://mhlee205.github.io/RADIATION-REPORT/';
-const SCOPE_DV=`${DV_URL}/user_impersonation openid profile email offline_access`;
+const DV_API=DV_URL+'/api/data/v9.2';
 const EXPORTER_NAME='LEENEAR CORPORATION';
 const EXPORTER_ADDR='VORT SUIDOBASHI3 5FL, 2-8-11 KANDASARUGAKUCHO, CHIYODA, TOKYO, JAPAN, 101-0064';
 const ITEM_MAP={'JOCC':'WASTE PAPER JOCC','JONP':'WASTE PAPER JONP','JOMG':'WASTE PAPER JOMG'};
 
 const S={
-  accessToken:null,tokenExpiry:0,refreshToken:null,userName:'',userEmail:'',
   selectedIV:null,
   photos:{bg:[null,null,null,null],m1:[null,null,null,null],sf:[null,null,null,null]},
   values:{bg:[null,null,null,null],m1:[null,null,null,null],sf:[null,null,null,null]}
 };
 
-// ── テーマ ──
-(function(){
-  const saved=localStorage.getItem('leenai_rr_theme')||'leenai';
-  document.documentElement.setAttribute('data-theme',saved);
-  document.addEventListener('DOMContentLoaded',()=>updateThemeBtn(saved));
-})();
-function updateThemeBtn(t){
-  const b=document.getElementById('themeBtn');
-  if(!b) return;
-  const labels={dark:'🌙 ダーク',light:'☀️ ライト',leenai:'🌿 LEENAI',focus:'🎯 FOCUS'};
-  b.textContent=labels[t]||'🌿 LEENAI';
-}
-function toggleTheme(){
-  const current=document.documentElement.getAttribute('data-theme')||'leenai';
-  const order=['dark','light','leenai','focus'];
-  const next=order[(order.indexOf(current)+1)%order.length];
-  document.documentElement.setAttribute('data-theme',next);
-  localStorage.setItem('leenai_rr_theme',next);
-  updateThemeBtn(next);
-}
-
-// ── ローディング ──
-function showLoading(msg='処理中...'){document.getElementById('loadingOverlay').classList.add('show');document.getElementById('loadingMsg').textContent=msg;}
-function hideLoading(){document.getElementById('loadingOverlay').classList.remove('show');}
-
-// ── PKCE OAuth ──
-function b64url(buf){return btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');}
-async function sha256(str){return crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));}
-function randomStr(len=64){const a=new Uint8Array(len);crypto.getRandomValues(a);return b64url(a).slice(0,len);}
-
-async function startLogin(){
-  const verifier=randomStr(64);const challenge=b64url(await sha256(verifier));const state=randomStr(16);
-  sessionStorage.setItem('pkce_v',verifier);sessionStorage.setItem('pkce_s',state);
-  const p=new URLSearchParams({client_id:CLIENT_ID,response_type:'code',redirect_uri:REDIRECT_URI,scope:SCOPE_DV,state,code_challenge:challenge,code_challenge_method:'S256',prompt:'select_account'});
-  location.href=`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/authorize?${p}`;
-}
-
-async function handleCallback(){
-  const p=new URLSearchParams(location.search);const code=p.get('code');if(!code)return;
-  history.replaceState({},'',location.pathname);
-  const verifier=sessionStorage.getItem('pkce_v');if(!verifier){alert('セッション期限切れ。再ログインしてください。');return;}
-  showLoading('認証中...');
-  try{
-    const res=await fetch(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`,{
-      method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
-      body:new URLSearchParams({client_id:CLIENT_ID,grant_type:'authorization_code',code,redirect_uri:REDIRECT_URI,code_verifier:verifier,scope:SCOPE_DV})
-    });
-    const data=await res.json();if(!data.access_token)throw new Error(data.error_description||'トークン取得失敗');
-    S.accessToken=data.access_token;S.refreshToken=data.refresh_token||null;S.tokenExpiry=Date.now()+(data.expires_in-60)*1000;
-    if(data.id_token){try{
-      const parts=data.id_token.split('.');
-      const b64=parts[1].replace(/-/g,'+').replace(/_/g,'/');
-      const bytes=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));
-      const pl=JSON.parse(new TextDecoder('utf-8').decode(bytes));
-      S.userName=pl.name||pl.given_name||'';
-      S.userEmail=pl.email||pl.preferred_username||'';
-    }catch(e){}}
-    hideLoading();onLoginSuccess();
-  }catch(e){hideLoading();alert('認証エラー: '+e.message);}
-}
-
-async function checkToken(){
-  if(S.accessToken&&Date.now()<S.tokenExpiry)return true;
-  if(!S.refreshToken){alert('トークン期限切れ。再ログインしてください。');return false;}
-  try{
-    const res=await fetch(`https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`,{
-      method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
-      body:new URLSearchParams({client_id:CLIENT_ID,grant_type:'refresh_token',refresh_token:S.refreshToken,scope:SCOPE_DV})
-    });
-    const data=await res.json();if(!data.access_token)throw new Error('更新失敗');
-    S.accessToken=data.access_token;S.tokenExpiry=Date.now()+(data.expires_in-60)*1000;if(data.refresh_token)S.refreshToken=data.refresh_token;return true;
-  }catch(e){alert('トークン更新失敗。再ログインしてください。');return false;}
-}
-
-function onLoginSuccess(){
-  const gate=document.getElementById('loginGate');if(gate)gate.style.display='none';
-  const ub=document.getElementById('userBadge');ub.textContent='✅ '+(S.userName||S.userEmail||'ログイン済み');ub.style.display='inline-block';
-  document.getElementById('card1').classList.remove('active');document.getElementById('card1').classList.add('done');
+// ── LEENAI 共通 初期化 ──
+function startTool(){
   document.getElementById('card2').classList.add('active');
-  const today=new Date();
-  const fmt=d=>{const [y,m,day]=d.toISOString().split('T')[0].split('-');return `${y}-${m}-${day}`;};
-  const m3=new Date(today);m3.setDate(today.getDate()-3);
-  const p3=new Date(today);p3.setDate(today.getDate()+3);
+  var today=new Date();
+  var fmt=function(d){return d.toISOString().split('T')[0];};
+  var m3=new Date(today);m3.setDate(today.getDate()-3);
+  var p3=new Date(today);p3.setDate(today.getDate()+3);
   document.getElementById('dateFrom').value=fmt(m3);
   document.getElementById('dateTo').value=fmt(p3);
+  loadApiKey();
 }
+LEENAI.init({
+  sys:'D-02',
+  name:'放射線測定 報告書',
+  version:'6.0',
+  date:'2026-10-08',
+  desc:'COMPASSデータから放射性物質簡易測定結果報告書を作成します',
+  redirectUri:'https://mhlee205.github.io/RADIATION-REPORT/',
+  onReady:startTool,
+});
+
+// ── ローディング (共通に委譲) ──
+function showLoading(msg){LEENAI.loading.show(msg||'処理中...');}
+function hideLoading(){LEENAI.loading.hide();}
 
 // ── Dataverse API ──
 async function dvGet(path){
-  if(!(await checkToken()))throw new Error('認証が必要です');
-  const res=await fetch(`${DV_API}/${path}`,{
-    headers:{'Authorization':'Bearer '+S.accessToken,'Accept':'application/json','OData-MaxVersion':'4.0','OData-Version':'4.0','Prefer':'odata.maxpagesize=500'}
+  var token=await LEENAI.auth.token('dataverse');
+  var res=await fetch(DV_API+'/'+path,{
+    headers:{'Authorization':'Bearer '+token,'Accept':'application/json','OData-MaxVersion':'4.0','OData-Version':'4.0','Prefer':'odata.maxpagesize=500'}
   });
-  if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(`APIエラー ${res.status}: ${err?.error?.message||''}`);}
+  if(!res.ok){var err=await res.json().catch(function(){return {};});throw new Error('APIエラー '+res.status+': '+(err&&err.error&&err.error.message||''));}
   return res.json();
 }
 
@@ -1591,7 +1461,7 @@ function loadScript(src){return new Promise((res,rej)=>{const s=document.createE
 function saveApiKey(val){if(val.trim())localStorage.setItem('leenai_rr_apikey',val.trim());}
 function loadApiKey(){const saved=localStorage.getItem('leenai_rr_apikey')||'';const el=document.getElementById('apiKey');if(el&&saved)el.value=saved;}
 
-window.addEventListener('load',()=>{handleCallback();loadApiKey();});
+// LEENAI が認証コールバックを処理するため window.onload の handleCallback は不要
 </script>
 </body>
 </html>
