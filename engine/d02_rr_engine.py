@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 ✦ Powered by LEENAI Automation System
-D-02 RR 写真読み取りエンジン v7.0.3  (RPA PC · C:\\LEENAI_D02)
+D-02 RR 写真読み取りエンジン v7.0.4  (RPA PC · C:\\LEENAI_D02)
 
 する事 (1 日 1 回 · 夜 21:00 · 形님 決定 2026-11-21):
   1. SharePoint PHOTO_V2 の 最近更新された IV フォルダの _RR を見る (読むだけ · C-01 エンジンのファイルは変えない)
@@ -25,7 +25,7 @@ D-02 RR 写真読み取りエンジン v7.0.3  (RPA PC · C:\\LEENAI_D02)
 import argparse, base64, datetime as dt, hashlib, io, json, logging, os, re, sys, time
 import urllib.parse
 
-ENGINE_VER = "7.0.3"   # 7.0.3: 表示どおりの数値 (rr_value_disp) · 写真に時刻があるか (rr_stamp_time) · 2 回目は小数点が見えなければ null · 10 倍違いは null · 合わない写真だけ 3 回目 ·  7.0.1: AI の答えの長さを写真の枚数に合わせる (LTO 25 枚で切れた) · 7.0.2: 2 回目は原寸から切り出して拡大 · IV は全部確認 (完了は PC に記録) · 単価 $2/$10 (토르 Step 3-6 보고)
+ENGINE_VER = "7.0.4"   # 7.0.4: 写真の中の日付・時刻を 原寸から切り出して もう一度読む (NAS2611-06 「2026.11.10 8:52」 の時刻を見落とした) ·  7.0.3: 表示どおりの数値 (rr_value_disp) · 写真に時刻があるか (rr_stamp_time) · 2 回目は小数点が見えなければ null · 10 倍違いは null · 合わない写真だけ 3 回目 ·  7.0.1: AI の答えの長さを写真の枚数に合わせる (LTO 25 枚で切れた) · 7.0.2: 2 回目は原寸から切り出して拡大 · IV は全部確認 (完了は PC に記録) · 単価 $2/$10 (토르 Step 3-6 보고)
 HERE = os.path.dirname(os.path.abspath(__file__))
 KINDS = ("bg", "m1", "sf")
 NEED = 4
@@ -197,16 +197,22 @@ For each photo also read:
 - "screen_on": false if the meter screen is off/blank.
 - "box": [x0,y0,x1,y1] of the main value digits, integers 0-1000 relative to the image width/height. null if not visible.
 - "device": the meter brand/model printed on it (e.g. "LifeBasis", "RANGER", "IWATSU SV-2000"), null if not printed.
-- "stamp": a date/time printed on the photo by the camera or phone (NOT the meter's own clock), as "YYYY-MM-DD HH:MM" or "YYYY-MM-DD", null if none. Read MM/DD/YYYY correctly.
+- "stamp": a date/time printed on the photo by the camera or phone (NOT the meter's own clock), as "YYYY-MM-DD HH:MM" or "YYYY-MM-DD", null if none. Read MM/DD/YYYY correctly. The time is often small and next to the date (e.g. "2026.11.10 8:52") — include it.
+- "stamp_box": [x0,y0,x1,y1] of that printed date/time text, integers 0-1000, null if none.
 If you are not sure of a kind, use null. Never guess.
 Answer ONLY with JSON, no other text:
-{{"photos":[{{"p":1,"session":"S1","kind":"bg|m1|sf|null","point":1,"value":"00.09","unit":"μSv/h","screen_on":true,"box":[0,0,0,0],"device":"...","stamp":"..."}}]}}"""
+{{"photos":[{{"p":1,"session":"S1","kind":"bg|m1|sf|null","point":1,"value":"00.09","unit":"μSv/h","screen_on":true,"box":[0,0,0,0],"device":"...","stamp":"...","stamp_box":[0,0,0,0]}}]}}"""
 
 PROMPT_VALUE = """Each image is a close crop of a radiation meter screen, labelled C1..C{n}.
 Read the MAIN dose-rate number exactly as displayed, keeping every digit and the decimal point (e.g. "00.09", "0.130", "0.20"). For LifeBasis meters read the "Dose Rate" line, not "Average Dose Rate" or "Total Dose".
 The decimal point is often a small dot. If you cannot clearly see where the decimal point is, use null (do not assume its position).
 Use null if the digits are not clearly readable. Never guess.
 Answer ONLY with JSON: {{"values":[{{"c":1,"value":"00.09"}}]}}"""
+
+PROMPT_STAMP = """Each image is a close crop of the date/time printed on a photo by a camera or phone app, labelled S1..S{n}.
+Read the date AND the time exactly. Formats vary: "2026.11.10 8:52", "11/19/2026", "2026/11/18 16:14", "2026年11月19日 14:27", "11/13/2026 07:49".
+Return "date" as "YYYY-MM-DD" and "time" as "HH:MM" (24h, add a leading zero). Use null for anything not clearly readable. Never guess.
+Answer ONLY with JSON: {{"stamps":[{{"s":1,"date":"2026-11-10","time":"08:52"}}]}}"""
 
 PRICE = {"in": 2.0 / 1e6, "out": 10.0 / 1e6}   # USD / token (Sonnet 5.5 · 토르 확인 2026-11-21 · 費用上限の計算用)
 
@@ -330,6 +336,7 @@ def finalize(photos, ai_rows, set_name):
             "rr_value_disp": disp_value(r.get("value"), r.get("unit")) if screen else None,
             "rr_stamp_time": bool(re.search(r"\d{1,2}:\d{2}", str(r.get("stamp") or ""))),
             "rr_box": valid_box(r.get("box")),
+            "_stamp_box": valid_box(r.get("stamp_box")),
             "rr_screen_ok": screen,
             "rr_device": (str(r["device"]).strip()[:40] if r.get("device") else None),
             "rr_taken": ph.get("taken") or check_stamp(r.get("stamp"), set_name) or None,
@@ -440,8 +447,11 @@ def read_set(g, ai, cfg, set_name, items, log):
                     if v3 is not None and abs(v3 - r["rr_value"]) < 1e-9:
                         r["rr_value2"] = v3
                         r["rr_value2_note"] = (r.get("rr_value2_note", "") + "+retry").lstrip("+")   # 例 decimal+retry (記録は残す)
+    if len(photos) <= cfg["max_photos_per_set"]:
+        read_stamps(ai, photos, recs, set_name)
     for p, r in zip(photos, recs):
         r["rr_sharp"] = sharpness(p["im"], r["rr_box"])
+        r.pop("_stamp_box", None)
     fp = fingerprint(items)
     summ = session_summary(recs)
     for k, v in summ.items():
@@ -455,6 +465,40 @@ def read_set(g, ai, cfg, set_name, items, log):
 def tokens_for(n, per_photo, base):
     """AI の答えの長さの上限 = 写真の枚数 × 1 枚分 + 余裕 (16000 まで)"""
     return int(min(16000, base + per_photo * n))
+
+def stamp_crop_box(r):
+    """日付・時刻の枠 (AI ① の stamp_box) · 無ければ 写真の下 35% (カメラの日付は たいてい下)"""
+    b = r.get("_stamp_box")
+    return b if b else [0, 650, 1000, 1000]
+
+def norm_time(t):
+    m = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*", str(t or ""))
+    if not m or int(m[1]) > 23 or int(m[2]) > 59: return ""
+    return f"{int(m[1]):02d}:{m[2]}"
+
+def read_stamps(ai, photos, recs, set_name):
+    """写真の中の日付・時刻を 原寸から切り出して もう一度読む (EXIF に時刻がある写真は読まない · AI 1 回)"""
+    targets = [(i, r) for i, r in enumerate(recs) if not (photos[i].get("taken") and len(photos[i]["taken"]) >= 16)]
+    if not targets: return
+    crops = [crop_jpeg(photos[i]["full"], stamp_crop_box(r), margin=0.12, min_w=900) for i, r in targets]
+    ans = ai.ask(PROMPT_STAMP.format(n=len(crops)), crops, [f"S{n}" for n in range(1, len(crops) + 1)],
+                 max_tokens=tokens_for(len(crops), 40, 600))
+    got = {}
+    for s in ans.get("stamps", []):
+        try: got[int(s.get("s"))] = s
+        except Exception: pass
+    for n, (i, r) in enumerate(targets, 1):
+        s = got.get(n) or {}
+        d = check_stamp(s.get("date"), set_name)[:10] if s.get("date") else ""
+        tm = norm_time(s.get("time"))
+        if not d: continue
+        # 先に読んだ日付 (EXIF · AI ①) と違う日付なら 使わない (読み違い)
+        prev = (r.get("rr_taken") or "")[:10]
+        if prev and prev != d: continue
+        r["rr_taken"] = f"{d} {tm}" if tm else d
+        r["rr_taken_src"] = r.get("rr_taken_src") or "stamp"
+        if r["rr_taken_src"] == "exif" and tm: r["rr_taken_src"] = "exif+stamp"
+        r["rr_stamp_time"] = bool(tm) or r.get("rr_stamp_time", False)
 
 def fingerprint(items):
     h = hashlib.sha1()

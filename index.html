@@ -311,7 +311,9 @@ input[type="date"]{color-scheme:dark;}
      · 時刻が写っていない写真には 本当の撮影時刻 (EXIF) を角に小さく表示 (元の文字は隠さない · 住所などはそのまま)
      · 2 回目が読めなかった数値は 1 つずつ写真を見て ✓ (まとめて確認の対象外) · 自動選択は 手で確認する数値が少ない組を先に
    v7.0.2 (2026-11-21 形님): 2 回目が読めない数値も 「全部同じ」 でまとめて確認 (1 つずつ ✓ をやめる · 2 回の読みが違う赤は今まで通り)
-     · 写真の並び = 10m → 1m → 表面 (数値の確認 · 報告書と同じ順) */
+     · 写真の並び = 10m → 1m → 表面 (数値の確認 · 報告書と同じ順)
+   v7.0.3 (2026-11-21 形님): 報告書の写真 12 枚 すべてに 同じ位置 · 同じ大きさ · 同じ形で 撮影日時 (写真から読んだ本当の値 · EXIF / 写真の中の日付) を書く
+     (統一 · 小さくて見えない元の日付の代わりに読める大きさで) · 撮影日が分からない写真には書かない (メール受信日は撮影日ではない) */
 
 /* ── 設定 (この 1 か所だけ) ── */
 const RR_CFG={
@@ -371,7 +373,7 @@ function startTool(){
 LEENAI.init({
   sys:'D-02',
   name:'放射線測定 報告書',
-  version:'7.0.2',
+  version:'7.0.3',
   date:'2026-11-21',
   desc:'COMPASS と SharePoint (PHOTO_V2) の写真から放射性物質簡易測定結果報告書を作成します',
   redirectUri:'https://mhlee205.github.io/RADIATION-REPORT/',
@@ -1311,6 +1313,8 @@ async function confirmSelection(){
   if(last&&meas>last&&!nWarn&&!confirm(`測定日 ${meas} が CY CUT ${RR_CFG.cutDays}日前 (${last}) より後です。このまま進めますか？`))return;
   const mtime=(document.getElementById('measTime').value||'').trim();
   if(mtime&&!/^\d{1,2}:\d{2}(~\d{1,2}:\d{2})?$/.test(mtime)){alert('時:分 の形が正しくありません（例 14:27 または 14:27~14:28）。');document.getElementById('measTime').focus();return;}
+  const noTime=items.filter(it=>!/ \d{2}:\d{2}$/.test(it.file.taken||'')).length;
+  if(noTime&&!confirm(`撮影時刻が読めなかった写真が ${noTime}枚 あります（その写真は日付だけ · または表示なし）。このまま作りますか？`))return;
   S.meas=meas+(mtime?' '+mtime:'');
   showLoading('写真を準備中...');
   try{
@@ -1646,19 +1650,26 @@ function drawLabel(ctx,w,label){
   ctx.fillStyle='#ffffff';ctx.fillText(label,6+pad,6+pad+fs*0.85);
 }
 
+/* 報告書の写真に書く撮影日時 = 写真から読んだ本当の値 (EXIF · 写真の中の日付) → 業者確認の日付 · 分からなければ '' */
+function photoLabel(f){
+  const t=normTaken(f.taken||'');
+  if(t)return t;                                  /* 'YYYY-MM-DD HH:MM' か 'YYYY-MM-DD' */
+  return f.vendor||'';
+}
+
 async function preparePhotos(){
   const targets=selState.filter(s=>s.category);
-  let added=0;
+  let added=0,dateOnly=0;
   for(const item of targets){
     if(!item.orig)continue;
-    // 時刻が写っていない写真 (エンジン rr_stamp_time=false) で 本当の撮影時刻 (EXIF 等) がある時だけ 表示を足す
-    const t=item.file.taken||'';
-    const label=(item.file.eng.stampTime===false&&/ \d{2}:\d{2}$/.test(t))?t:'';
-    if(label)added++;
+    // v7.0.3: 12 枚すべてに 同じ位置 · 同じ大きさで 撮影日時 (統一) · 元の写真の文字は隠さない
+    const label=photoLabel(item.file);
+    if(label){added++;if(label.length<16)dateOnly++;}
     // 何度確定しても 元の写真から作る
     item.b64=await toPortrait(item.orig,label);
   }
-  log(`報告書用の写真 ${targets.length}枚 を準備しました（写真の文字はそのまま${added?` · 時刻が写っていない ${added}枚 に撮影時刻を表示`:''}）`,'ok');
+  const none=targets.length-added;
+  log(`報告書用の写真 ${targets.length}枚 · 撮影日時を表示 ${added}枚`+(dateOnly?` (時刻が読めず日付だけ ${dateOnly}枚)`:'')+(none?` · 撮影日が分からず表示なし ${none}枚`:''),(dateOnly||none)?'warn':'ok');
 }
 // ── 検査機器 その他 처리 ──
 function toggleInspOther(val){
