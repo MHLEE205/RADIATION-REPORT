@@ -1,0 +1,13 @@
+{
+  "_note": "✦ Powered by LEENAI Automation System — D-02 RR エンジン設定。config.json にコピーして使う。キー・トークンは書かない (Anthropic キー = keyring 'LEENAI_ANTHROPIC_API_KEY' か 環境変数 ANTHROPIC_API_KEY) · since_days 0 = IV フォルダを全部見る (完了した IV は data/done_ivs.json で飛ばす)",
+  "tenant_id": "<C-01 エンジンと同じ テナント ID>",
+  "client_id": "<THOR アプリの client ID (デバイスコードログインを許可したアプリ)>",
+  "drive_id": "<LEENAI_COMMON の SP.DRIVE_ID と同じ>",
+  "photo_root": "古紙/-. 古紙書類/▲ LEENAI 通関作業中/PHOTO_V2",
+  "read_root": "古紙/-. 古紙書類/▲ LEENAI 通関作業中/RR_READ",
+  "model": "claude-sonnet-5-5",
+  "since_days": 0,
+  "max_photos_per_set": 40,
+  "daily_cost_cap_usd": 5.0,
+  "img_long_edge": 1024
+}

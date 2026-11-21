@@ -1,0 +1,5 @@
+msal>=1.28
+requests>=2.31
+Pillow>=10.0
+numpy>=1.26
+keyring>=24.0

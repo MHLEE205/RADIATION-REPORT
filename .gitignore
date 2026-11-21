@@ -1,0 +1,6 @@
+# ✦ Powered by LEENAI Automation System — 비밀 · 실행 자료는 올리지 않음
+engine/config.json
+engine/data/
+data/
+__pycache__/
+*.pyc
