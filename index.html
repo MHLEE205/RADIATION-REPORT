@@ -233,15 +233,15 @@ input[type="date"]{color-scheme:dark;}
       <div id="photoReview" style="display:none;margin-top:16px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
           <div style="font-size:13px;font-weight:600;">📸 写真の分類</div>
-          <div style="font-size:11px;color:var(--text2);">違う時だけ写真をクリック（未選択→表面→1m→10m→未選択）· 灰色 = 使えない写真（CY CUT 以後 · 業者に撮影日の確認が必要）</div>
+          <div style="font-size:11px;color:var(--text2);">違う時だけ写真をクリック（未選択→10m→1m→表面→未選択）· 灰色 = 使えない写真（CY CUT 以後 · 業者に撮影日の確認が必要）</div>
         </div>
 
         <!-- 選択状況バー -->
         <div style="display:flex;gap:16px;margin-bottom:14px;padding:10px 14px;background:var(--surface2);border-radius:8px;flex-wrap:wrap;">
           <div style="display:flex;align-items:center;gap:6px;">
-            <span style="font-size:11px;font-weight:600;color:#ef4444;">表面(0m)</span>
-            <span id="sfCount" style="font-size:11px;color:var(--text2);">0/4</span>
-            <div id="sfDots" style="display:flex;gap:3px;"></div>
+            <span style="font-size:11px;font-weight:600;color:#22c55e;">10m離隔(背景)</span>
+            <span id="bgCount" style="font-size:11px;color:var(--text2);">0/4</span>
+            <div id="bgDots" style="display:flex;gap:3px;"></div>
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
             <span style="font-size:11px;font-weight:600;color:#4f8ef7;">1m離隔</span>
@@ -249,9 +249,9 @@ input[type="date"]{color-scheme:dark;}
             <div id="m1Dots" style="display:flex;gap:3px;"></div>
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
-            <span style="font-size:11px;font-weight:600;color:#22c55e;">10m離隔(背景)</span>
-            <span id="bgCount" style="font-size:11px;color:var(--text2);">0/4</span>
-            <div id="bgDots" style="display:flex;gap:3px;"></div>
+            <span style="font-size:11px;font-weight:600;color:#ef4444;">表面(0m)</span>
+            <span id="sfCount" style="font-size:11px;color:var(--text2);">0/4</span>
+            <div id="sfDots" style="display:flex;gap:3px;"></div>
           </div>
         </div>
 
@@ -309,7 +309,9 @@ input[type="date"]{color-scheme:dark;}
    報告書の様式 (表 · 写真の並び · キャプション · Word) は v6.0 のまま。
    v7.0.1 (2026-11-21 形님): 数値 = 測定器の画面の表示どおり (0.20 → 0.20) · b/a 小数 4 桁 · 測定日に 時:分 (最初〜最後の写真)
      · 時刻が写っていない写真には 本当の撮影時刻 (EXIF) を角に小さく表示 (元の文字は隠さない · 住所などはそのまま)
-     · 2 回目が読めなかった数値は 1 つずつ写真を見て ✓ (まとめて確認の対象外) · 自動選択は 手で確認する数値が少ない組を先に */
+     · 2 回目が読めなかった数値は 1 つずつ写真を見て ✓ (まとめて確認の対象外) · 自動選択は 手で確認する数値が少ない組を先に
+   v7.0.2 (2026-11-21 形님): 2 回目が読めない数値も 「全部同じ」 でまとめて確認 (1 つずつ ✓ をやめる · 2 回の読みが違う赤は今まで通り)
+     · 写真の並び = 10m → 1m → 表面 (数値の確認 · 報告書と同じ順) */
 
 /* ── 設定 (この 1 か所だけ) ── */
 const RR_CFG={
@@ -369,7 +371,7 @@ function startTool(){
 LEENAI.init({
   sys:'D-02',
   name:'放射線測定 報告書',
-  version:'7.0.1',
+  version:'7.0.2',
   date:'2026-11-21',
   desc:'COMPASS と SharePoint (PHOTO_V2) の写真から放射性物質簡易測定結果報告書を作成します',
   redirectUri:'https://mhlee205.github.io/RADIATION-REPORT/',
@@ -748,7 +750,7 @@ async function loadRR(ivNo){
     const fail=full.filter(s=>s.plan.pass===false);
     if(fail.length)log(`⚠ 不合格になる組があります (${fail.map(s=>s.label).join(' · ')}) — 内容を確認してください`,'err');
     const pool=pass.length?pass:full.filter(s=>s.plan.pass===null);
-    pool.sort((a,b)=>(a.plan.warn-b.plan.warn)||(a.plan.need-b.plan.need)||(b.plan.sharp-a.plan.sharp));   /* 警告の少ない組 → 手で確認する数値が少ない組 → 鮮明な組 */
+    pool.sort((a,b)=>(a.plan.warn-b.plan.warn)||(a.plan.need-b.plan.need)||(a.plan.one-b.plan.one)||(b.plan.sharp-a.plan.sharp));   /* 警告の少ない組 → 手で入力する数値が少ない組 → 2 回目なしが少ない組 → 鮮明な組 */
     const auto=pool[0]||null;
     renderSetGrid(auto?auto.id:null);
     if(auto){
@@ -888,24 +890,26 @@ function planGroup(g){
       .sort((a,b)=>(b.sharp||0)-(a.sharp||0)).slice(0,RR_CFG.need);
   });
   const complete=KEYS.every(k=>pick[k].length>=RR_CFG.need);
-  let pass=null,sharp=0,warn=0,need=0;
+  let pass=null,sharp=0,warn=0,need=0,one=0;
   if(complete){
     const chosen=KEYS.flatMap(k=>pick[k]);
     sharp=chosen.reduce((a,f)=>a+(f.sharp||0),0)/chosen.length;
     warn=chosen.filter(f=>isWarn(f)).length;
     need=chosen.filter(f=>engNeedsHand(f)).length;
+    one=chosen.filter(f=>engOneRead(f)).length;
     const vals={};KEYS.forEach(k=>{vals[k]=pick[k].map(f=>f.eng.value);});
     if(KEYS.every(k=>vals[k].every(v=>v!==null)))pass=judge(vals).ok;
   }
-  return {pick,complete,pass,sharp,warn,need};
+  return {pick,complete,pass,sharp,warn,need,one};
 }
-/* 手で確認が必要になる数値か (読めない · 2 回が違う · 2 回目が読めない) */
+/* 手で入力が必要になる数値か (読めない · 2 回の読みが違う) */
 function engNeedsHand(f){
   const e=f.eng;
   if(e.value===null)return true;
-  if(e.value2===null)return true;
-  return Math.abs(e.value-e.value2)>1e-9;
+  return e.value2!==null&&Math.abs(e.value-e.value2)>1e-9;
 }
+/* 2 回目が読めなかった数値 (自動選択で 同じなら少ない組を先に) */
+function engOneRead(f){return f.eng.value!==null&&f.eng.value2===null;}
 /* CY CUT 2〜1日前 (確定時に聞く) */
 function isWarn(f){const s=dateState(f);return s==='warn'||s==='recv_warn';}
 /* 自動で使ってよい写真 */
@@ -1080,8 +1084,8 @@ function catItems(key){
 function renderSelectionGrid(){
   const grid=document.getElementById('selectionGrid');
   grid.innerHTML='';
-  // 表面(sf) → 1m(m1) → 10m(bg) → 未選択 の順に表示
-  const display=[...catItems('sf'),...catItems('m1'),...catItems('bg'),...selState.filter(s=>!s.category).sort((a,b)=>a.seq-b.seq)];
+  // 10m(bg) → 1m(m1) → 表面(sf) → 未選択 の順に表示 (数値の確認 · 報告書と同じ順)
+  const display=[...catItems('bg'),...catItems('m1'),...catItems('sf'),...selState.filter(s=>!s.category).sort((a,b)=>a.seq-b.seq)];
   const catLabel={sf:'表面(0m)',m1:'1m離隔',bg:'10m離隔'};
   const catColor={sf:'rgba(239,68,68,.85)',m1:'rgba(79,142,247,.85)',bg:'rgba(34,197,94,.85)'};
   display.forEach(item=>{
@@ -1090,7 +1094,7 @@ function renderSelectionGrid(){
     const off=!selectable(item.file);
     const div=document.createElement('div');
     div.className='sel-photo'+(item.category?' '+item.category:'')+(off?' off':'');
-    if(!off){div.onclick=()=>cycleCategory(i);div.title='クリックで分類変更（未選択→表面→1m→10m→未選択）';}
+    if(!off){div.onclick=()=>cycleCategory(i);div.title='クリックで分類変更（未選択→10m→1m→表面→未選択）';}
     else div.title=ds==='late'?`撮影日 ${knownDate(item.file)} — CY CUT 以後のため使えません`:'撮影日が無く、メールが CY CUT 以後 — 業者に撮影日を確認して入力してください';
     const num=item.category?catItems(item.category).indexOf(item)+1:'';
     const byAuto=item.category&&item.category===item.file.eng.kind&&!item.manual;
@@ -1112,7 +1116,7 @@ function renderSelectionGrid(){
 }
 
 function cycleCategory(idx){
-  const order=[null,'sf','m1','bg'];
+  const order=[null,'bg','m1','sf'];
   const item=selState[idx];
   if(!selectable(item.file))return;
   const cur=item.category;
@@ -1153,8 +1157,7 @@ function updateSelectionStatus(){
 
 // ── 数値の確認 (OCR は 100% ではない → 担当者が写真と見比べて確認するまで確定できない) ──
 /* 1 つの値の状態:
-   'todo'  (AI の読み取り · 2 回同じ · 未確認 → 「全部同じ」 でまとめて確認できる)
-   'check' (2 回目が読めなかった → 1 つずつ写真を見て ✓)
+   'todo'  (AI の読み取り · 未確認 → 「全部同じ」 でまとめて確認できる · 2 回目が読めなかった数値も含む · v7.0.2)
    'bad'   (要入力: 読み取り無し · 2 回の読みが違う · あり得ない値)
    'ok'    (確認済) */
 function valueState(item){
@@ -1164,7 +1167,6 @@ function valueState(item){
   const e=item.file.eng;
   if(!item.manual&&e.value!==null&&e.value2!==null&&Math.abs(e.value-e.value2)>1e-9&&v===e.value)return 'bad';
   if(item.verified)return 'ok';
-  if(!item.manual&&e.value2===null)return 'check';
   return 'todo';
 }
 function valueReason(item){
@@ -1173,7 +1175,7 @@ function valueReason(item){
   if(v<0||v>=10)return 'あり得ない値 — 写真を見て入力';
   if(!item.manual&&e.value!==null&&e.value2!==null&&Math.abs(e.value-e.value2)>1e-9&&v===e.value)return `読み取りが 2 回で違う (${e.value} / ${e.value2}) — 写真を見て入力`;
   if(item.verified)return item.manual?'入力済':'確認済';
-  if(!item.manual&&e.value2===null)return '2 回目が読めない — 写真を見て ✓';
+  if(!item.manual&&e.value2===null)return 'AI の読み取り · 未確認 (2 回目なし)';
   return 'AI の読み取り · 未確認';
 }
 
@@ -1194,7 +1196,7 @@ function renderValueGrid(){
         <div class="vf-row">
           <input type="text" inputmode="decimal" value="${esc(item.disp||'')}" placeholder="—" onchange="updateValue(${idx},this.value)">
           <span style="font-size:11px;color:var(--text2);">μSv/h</span>
-          ${(st==='todo'||st==='check')?`<button class="btn btn-ghost btn-sm" onclick="verifyOne(${idx})">✓ 同じ</button>`:''}
+          ${st==='todo'?`<button class="btn btn-ghost btn-sm" onclick="verifyOne(${idx})">✓ 同じ</button>`:''}
         </div>`;
       grid.appendChild(div);
       makeCrop(item).then(u=>{const im=document.getElementById(`vfc_${idx}`);if(im&&u)im.src=u;});
@@ -1231,13 +1233,12 @@ function makeCrop(item){
 
 function verifyOne(idx){
   const it=selState[idx];
-  const st=valueState(it);
-  if(st!=='todo'&&st!=='check')return;
+  if(valueState(it)!=='todo')return;
   it.verified=true;
   S.confirmed=false;setOutputEnabled(false);
   renderValueGrid();calcResults();
 }
-/* 「全部同じでした」 = 未確認 (AI の読み取り · 2 回同じ) をまとめて確認済に · 'check' (2 回目なし) と 要入力 (赤) は対象外 */
+/* 「全部同じでした」 = 未確認 (AI の読み取り) をまとめて確認済に · 要入力 (赤 = 読めない · 2 回の読みが違う) は対象外 */
 function verifyAll(){
   let n=0;
   KEYS.forEach(k=>catItems(k).forEach(it=>{if(valueState(it)==='todo'){it.verified=true;n++;}}));
@@ -1261,12 +1262,12 @@ function updateValue(idx,val){
 function updateVerifyButtons(){
   const items=KEYS.flatMap(k=>catItems(k).slice(0,RR_CFG.need));
   const st=items.map(valueState);
-  const todo=st.filter(s=>s==='todo').length,bad=st.filter(s=>s==='bad').length,chk=st.filter(s=>s==='check').length;
+  const todo=st.filter(s=>s==='todo').length,bad=st.filter(s=>s==='bad').length;
   const ab=document.getElementById('verifyAllBtn');if(ab)ab.disabled=!todo;
   const cb=document.getElementById('confirmBtn'),h=document.getElementById('confirmHint');
-  const ready=items.length===RR_CFG.need*3&&!todo&&!bad&&!chk;
+  const ready=items.length===RR_CFG.need*3&&!todo&&!bad;
   if(cb)cb.disabled=!ready;
-  if(h)h.textContent=ready?'':[bad?`入力が必要 ${bad}個`:'',chk?`1 つずつ確認 ${chk}個`:'',todo?`未確認 ${todo}個`:''].filter(Boolean).join(' · ');
+  if(h)h.textContent=ready?'':[bad?`入力が必要 ${bad}個`:'',todo?`未確認 ${todo}個`:''].filter(Boolean).join(' · ');
 }
 
 /* 選んだ写真 → S.values (地点順) */
