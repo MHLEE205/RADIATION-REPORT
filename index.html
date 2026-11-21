@@ -209,6 +209,11 @@ input[type="date"]{color-scheme:dark;}
           <input type="date" id="vendorDate" onchange="setVendorDate(this.value)">
           <div class="src-note">撮影日が無く、メールが CY CUT 以後に届いた写真 — 業者に「撮った日」だけ聞いて入力</div>
         </div>
+        <div class="form-group" id="estGroup" style="display:none;">
+          <label class="form-label">撮影時刻（目安）</label>
+          <input type="text" id="estTime" style="width:80px;" onchange="setEstTime(this.value)">
+          <div class="src-note">時刻が読めず 同じ組 · 同じ日の作業写真にも時刻がない写真に使う</div>
+        </div>
         <!-- 担当者: MH LEE 固定 (報告書様式) -->
       </div>
     </div>
@@ -314,12 +319,17 @@ input[type="date"]{color-scheme:dark;}
      · 写真の並び = 10m → 1m → 表面 (数値の確認 · 報告書と同じ順)
    v7.0.3 (2026-11-21 形님): 報告書の写真 12 枚 すべてに 同じ位置 · 同じ大きさ · 同じ形で 撮影日時 (写真から読んだ本当の値 · EXIF / 写真の中の日付) を書く
      (統一 · 小さくて見えない元の日付の代わりに読める大きさで) · 撮影日が分からない写真には書かない (メール受信日は撮影日ではない)
-   v7.0.4 (2026-11-21 形님): 撮影日時の表示 = 濃い灰色の帯 + 白の太字 · 写真の幅の 6.5% の文字 (写真と色が重なっても読める) */
+   v7.0.4 (2026-11-21 形님): 撮影日時の表示 = 濃い灰色の帯 + 白の太字 · 写真の幅の 6.5% の文字 (写真と色が重なっても読める)
+   v7.0.5 (2026-11-21 形님): 時刻が読めない写真の時刻 (目安 · 数分の差は問題にしない) =
+     ① 同じ組で 撮った順 (カメラのファイル番号) が一番近い写真の時刻 ② 同じ日の作業写真 (コンテナ写真) の一番早い時刻
+     ③ 「撮影時刻（目安）」 (初期値 08:30 · 担当者が確認 / 修正 · 形님: 作業は たいてい 8〜9 時)
+     日付は写真から読んだ本当の日付のまま · 無作為の時刻は作らない */
 
 /* ── 設定 (この 1 か所だけ) ── */
 const RR_CFG={
   need:4,                 /* 各区分の枚数 (背景10m · 1m · 表面) */
   cutDays:2,              /* 使える写真 = 撮影日が CY CUT の この日数 前まで */
+  estTimeDefault:'08:30', /* 時刻の目安 (③) の初期値 */
   maxVal:0.3,             /* 写真 1 枚の測定値の上限 (μSv/h) */
   maxRatio:1.5,           /* 判定: 表面平均 / 背景平均 (b/a) の上限 */
   /* 担当者が確定した内容を RR_READ/_confirm/{日付}/ に記録 (D-02 エンジンの精度測定用 · D-02 専用フォルダ) */
@@ -374,7 +384,7 @@ function startTool(){
 LEENAI.init({
   sys:'D-02',
   name:'放射線測定 報告書',
-  version:'7.0.4',
+  version:'7.0.5',
   date:'2026-11-21',
   desc:'COMPASS と SharePoint (PHOTO_V2) の写真から放射性物質簡易測定結果報告書を作成します',
   redirectUri:'https://mhlee205.github.io/RADIATION-REPORT/',
@@ -643,6 +653,7 @@ let photoSets=[];
 let selectedSetId=null;
 let selState=[];
 let rrKinds=null;
+let workTimes={};     /* 同じ IV の作業写真 (コンテナ写真) の撮影時刻 { 'YYYY-MM-DD': ['HH:MM',…] } */
 
 function resetStep3(){
   photoSets=[];selectedSetId=null;selState=[];rrKinds=null;
@@ -702,6 +713,7 @@ async function loadRR(ivNo){
     rrKinds=await grJson(`${base}/_kinds.json`);
     const rrRead=await grRead(ivNo).catch(e=>{log('エンジンの読み取り結果を読めません: '+e.message,'warn');return null;});
     const kids=await grChildrenOfPath(base);
+    workTimes=await loadWorkTimes(ivNo).catch(()=>({}));
     if(!kids){
       setProgress(0,'写真がありません');
       log(`PHOTO_V2/${ivNo}/_RR がありません — RR写真のメールがまだ届いていないか、エンジンの処理待ちです`,'warn');
@@ -767,6 +779,24 @@ async function loadRR(ivNo){
   }catch(e){setProgress(0,'読み込み失敗');log('写真の読み込みに失敗: '+e.message,'err');console.error(e);}
 }
 
+/* 同じ IV の作業写真 (PHOTO_V2/{IV}/{CT}/) の撮影時刻 — SharePoint の写真情報 (EXIF) か ファイル名 YYYYMMDD_HHMMSS · 本体は読まない */
+async function loadWorkTimes(ivNo){
+  const out={};
+  const top=await grChildrenOfPath(ivNo);
+  if(!top)return out;
+  const cts=top.filter(x=>x.folder&&!/^_/.test(x.name)&&x.name!=='搬入票');
+  for(const c of cts){
+    const items=(await grChildrenOfItem(c.id))||[];
+    items.forEach(it=>{
+      let t=normTaken(it.photo&&it.photo.takenDateTime);
+      if(!t){const m=String(it.name||'').match(/^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})/);if(m)t=`${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}`;}
+      if(t&&t.length>=16)(out[t.slice(0,10)]=out[t.slice(0,10)]||[]).push(t.slice(11,16));
+    });
+  }
+  Object.keys(out).forEach(d=>out[d].sort());
+  return out;
+}
+
 async function runPool(items,size,fn){
   let i=0;
   const workers=Array.from({length:Math.min(size,items.length)},async()=>{while(i<items.length){const it=items[i++];await fn(it);}});
@@ -830,7 +860,7 @@ function valText(key,i){
   return (v===null||v===undefined||isNaN(v))?'':String(v);
 }
 /* 写真の時刻 HH:MM (分からなければ '') */
-function hhmm(f){const m=(f&&f.taken||'').match(/ (\d{2}:\d{2})$/);return m?m[1]:'';}
+function hhmm(f){const m=(f&&f.taken||'').match(/ (\d{2}:\d{2})$/);return m?m[1]:((f&&f.estTime)||'');}
 function numOrNull(v){const n=(v===null||v===undefined||v==='')?NaN:Number(v);return isNaN(n)?null:n;}
 /* 'YYYY-MM-DD HH:MM' に揃える (ISO · 'YYYY:MM:DD HH:MM:SS' · 'YYYY/MM/DD HH:MM') — 読めなければ '' */
 function normTaken(v){
@@ -972,6 +1002,7 @@ function selectSet(id){
   });
   const pre=selState.filter(s=>s.category).length;
   log(pre?`「${set.label}」 自動の分類 ${pre}枚 — 違う時だけ写真をクリックしてください`:`「${set.label}」 エンジンの分類がありません — 写真をクリックして分類してください`,pre?'ok':'warn');
+  fillEstTimes(set);
   const needVendor=set.files.some(f=>!f.taken&&f.recv&&(dateState(f)==='ask'||f.vendor));
   document.getElementById('vendorGroup').style.display=needVendor?'block':'none';
   document.getElementById('vendorDate').value=set.vendorDate||'';
@@ -979,6 +1010,42 @@ function selectSet(id){
   renderSelectionGrid();
   updateSelectionStatus();
   document.getElementById('photoReview').style.display='block';
+}
+
+/* 時刻が読めない写真の 時刻 (目安) — ① 同じ組 · 撮った順 (ファイル番号) で一番近い (同じ距離なら前) ② 同じ日の作業写真 ③ 「撮影時刻（目安）」 */
+function hasTime(f){return normTaken(f.taken||'').length>=16;}
+function fillEstTimes(set){
+  const fs=set.files.slice().sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
+  let needEst=false;
+  fs.forEach((f,i)=>{
+    f.estTime='';f.estSrc='';
+    if(hasTime(f))return;
+    const d=knownDate(f);
+    if(!d)return;
+    let best=null;
+    for(let k=1;k<fs.length&&!best;k++){
+      for(const j of [i-k,i+k]){
+        const g=fs[j];
+        if(g&&hasTime(g)&&knownDate(g)===d){best=g;break;}
+      }
+    }
+    if(best){f.estTime=normTaken(best.taken).slice(11,16);f.estSrc='set';return;}
+    const w=workTimes[d];
+    if(w&&w.length){f.estTime=w[0];f.estSrc='work';return;}
+    needEst=true;f.estTime=set.estTime||RR_CFG.estTimeDefault;f.estSrc='manual';
+  });
+  const g=document.getElementById('estGroup');
+  if(g){g.style.display=needEst?'block':'none';document.getElementById('estTime').value=needEst?(set.estTime||RR_CFG.estTimeDefault):'';}
+}
+function setEstTime(v){
+  const set=photoSets.find(s=>s.id===selectedSetId);
+  if(!set)return;
+  const m=String(v||'').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if(!m||+m[1]>23||+m[2]>59){alert('時:分 の形で入力してください（例 08:30）。');document.getElementById('estTime').value=set.estTime||RR_CFG.estTimeDefault;return;}
+  set.estTime=`${String(+m[1]).padStart(2,'0')}:${m[2]}`;
+  fillEstTimes(set);fillMeasAndDevice(set);
+  S.confirmed=false;setOutputEnabled(false);
+  log(`撮影時刻（目安） ${set.estTime} を 時刻が読めない写真に使います`,'info');
 }
 
 /* 業者に確認した撮影日 → この組の 撮影日が分からない写真 に付ける → 選び直し */
@@ -1314,8 +1381,8 @@ async function confirmSelection(){
   if(last&&meas>last&&!nWarn&&!confirm(`測定日 ${meas} が CY CUT ${RR_CFG.cutDays}日前 (${last}) より後です。このまま進めますか？`))return;
   const mtime=(document.getElementById('measTime').value||'').trim();
   if(mtime&&!/^\d{1,2}:\d{2}(~\d{1,2}:\d{2})?$/.test(mtime)){alert('時:分 の形が正しくありません（例 14:27 または 14:27~14:28）。');document.getElementById('measTime').focus();return;}
-  const noTime=items.filter(it=>!/ \d{2}:\d{2}$/.test(it.file.taken||'')).length;
-  if(noTime&&!confirm(`撮影時刻が読めなかった写真が ${noTime}枚 あります（その写真は日付だけ · または表示なし）。このまま作りますか？`))return;
+  const noTime=items.filter(it=>!/ \d{2}:\d{2}$/.test(photoLabel(it.file))).length;   /* v7.0.5: 近い写真の時刻でも埋まらない写真だけ */
+  if(noTime&&!confirm(`撮影時刻が分からない写真が ${noTime}枚 あります（その写真は日付だけ · または表示なし）。このまま作りますか？`))return;
   S.meas=meas+(mtime?' '+mtime:'');
   showLoading('写真を準備中...');
   try{
@@ -1343,7 +1410,7 @@ async function writeConfirmLog(){
     tool:'D-02 v7.0.1', iv_no:S.selectedIV?.ivNo||'', set:set.label||'', cy_cut:S.selectedIV?.cyCut||'',
     meas_date:S.meas, device:currentTool(),
     vendor_date:set.vendorDate||'',
-    photos:selState.map(s=>({file:s.file.name,sha16:s.file.sha16||'',taken:s.file.taken||'',taken_src:s.file.takenSrc||'',received:s.file.recv||'',date_state:dateState(s.file),kind:s.category,disp:s.category?(s.disp||null):null,
+    photos:selState.map(s=>({file:s.file.name,sha16:s.file.sha16||'',taken:s.file.taken||'',taken_src:s.file.takenSrc||'',received:s.file.recv||'',date_state:dateState(s.file),kind:s.category,disp:s.category?(s.disp||null):null,est_time:s.file.estTime||'',est_src:s.file.estSrc||'',
       point:s.category?catItems(s.category).indexOf(s)+1:null,value:s.category?s.value:null,manual:!!s.manual,
       engine:{kind:s.file.eng.kind,point:s.file.eng.point,value:s.file.eng.value,value2:s.file.eng.value2}}))
   };
@@ -1653,26 +1720,28 @@ function drawLabel(ctx,w,label){
   ctx.fillStyle=LABEL_STYLE.fg;ctx.fillText(label,m+pad,m+pad+fs*0.85);
 }
 
-/* 報告書の写真に書く撮影日時 = 写真から読んだ本当の値 (EXIF · 写真の中の日付) → 業者確認の日付 · 分からなければ '' */
+/* 報告書の写真に書く撮影日時 = 写真から読んだ 日付 + 時刻 · 時刻が読めなければ 時刻 (目安 · fillEstTimes) · 日付も無ければ '' */
 function photoLabel(f){
   const t=normTaken(f.taken||'');
-  if(t)return t;                                  /* 'YYYY-MM-DD HH:MM' か 'YYYY-MM-DD' */
-  return f.vendor||'';
+  if(t.length>=16)return t;
+  const d=t||f.vendor||'';
+  if(!d)return '';
+  return f.estTime?`${d} ${f.estTime}`:d;
 }
 
 async function preparePhotos(){
   const targets=selState.filter(s=>s.category);
-  let added=0,dateOnly=0;
+  let added=0,dateOnly=0;const est={set:0,work:0,manual:0};
   for(const item of targets){
     if(!item.orig)continue;
     // v7.0.3: 12 枚すべてに 同じ位置 · 同じ大きさで 撮影日時 (統一) · 元の写真の文字は隠さない
     const label=photoLabel(item.file);
-    if(label){added++;if(label.length<16)dateOnly++;}
+    if(label){added++;if(label.length<16)dateOnly++;else if(!hasTime(item.file))est[item.file.estSrc||'set']++;}
     // 何度確定しても 元の写真から作る
     item.b64=await toPortrait(item.orig,label);
   }
   const none=targets.length-added;
-  log(`報告書用の写真 ${targets.length}枚 · 撮影日時を表示 ${added}枚`+(dateOnly?` (時刻が読めず日付だけ ${dateOnly}枚)`:'')+(none?` · 撮影日が分からず表示なし ${none}枚`:''),(dateOnly||none)?'warn':'ok');
+  log(`報告書用の写真 ${targets.length}枚 · 撮影日時を表示 ${added}枚`+(()=>{const x=[est.set?`同じ組 ${est.set}`:'',est.work?`作業写真 ${est.work}`:'',est.manual?`目安 ${est.manual}`:''].filter(Boolean).join(' · ');return x?` (時刻の目安: ${x})`:'';})()+(dateOnly?` (時刻が分からず日付だけ ${dateOnly}枚)`:'')+(none?` · 撮影日が分からず表示なし ${none}枚`:''),(dateOnly||none)?'warn':'ok');
 }
 // ── 検査機器 その他 처리 ──
 function toggleInspOther(val){
