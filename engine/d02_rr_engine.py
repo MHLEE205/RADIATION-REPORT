@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 ✦ Powered by LEENAI Automation System
-D-02 RR 写真読み取りエンジン v7.0.2  (RPA PC · C:\\LEENAI_D02)
+D-02 RR 写真読み取りエンジン v7.0.3  (RPA PC · C:\\LEENAI_D02)
 
 する事 (1 日 1 回 · 夜 21:00 · 形님 決定 2026-11-21):
   1. SharePoint PHOTO_V2 の 最近更新された IV フォルダの _RR を見る (読むだけ · C-01 エンジンのファイルは変えない)
@@ -25,7 +25,7 @@ D-02 RR 写真読み取りエンジン v7.0.2  (RPA PC · C:\\LEENAI_D02)
 import argparse, base64, datetime as dt, hashlib, io, json, logging, os, re, sys, time
 import urllib.parse
 
-ENGINE_VER = "7.0.2"   # 7.0.1: AI の答えの長さを写真の枚数に合わせる (LTO 25 枚で切れた) · 7.0.2: 2 回目は原寸から切り出して拡大 · IV は全部確認 (完了は PC に記録) · 単価 $2/$10 (토르 Step 3-6 보고)
+ENGINE_VER = "7.0.3"   # 7.0.3: 表示どおりの数値 (rr_value_disp) · 写真に時刻があるか (rr_stamp_time) · 2 回目は小数点が見えなければ null · 10 倍違いは null · 合わない写真だけ 3 回目 ·  7.0.1: AI の答えの長さを写真の枚数に合わせる (LTO 25 枚で切れた) · 7.0.2: 2 回目は原寸から切り出して拡大 · IV は全部確認 (完了は PC に記録) · 単価 $2/$10 (토르 Step 3-6 보고)
 HERE = os.path.dirname(os.path.abspath(__file__))
 KINDS = ("bg", "m1", "sf")
 NEED = 4
@@ -203,7 +203,8 @@ Answer ONLY with JSON, no other text:
 {{"photos":[{{"p":1,"session":"S1","kind":"bg|m1|sf|null","point":1,"value":"00.09","unit":"μSv/h","screen_on":true,"box":[0,0,0,0],"device":"...","stamp":"..."}}]}}"""
 
 PROMPT_VALUE = """Each image is a close crop of a radiation meter screen, labelled C1..C{n}.
-Read the MAIN dose-rate number exactly as displayed (e.g. "00.09", "0.130"). For LifeBasis meters read the "Dose Rate" line, not "Average Dose Rate" or "Total Dose".
+Read the MAIN dose-rate number exactly as displayed, keeping every digit and the decimal point (e.g. "00.09", "0.130", "0.20"). For LifeBasis meters read the "Dose Rate" line, not "Average Dose Rate" or "Total Dose".
+The decimal point is often a small dot. If you cannot clearly see where the decimal point is, use null (do not assume its position).
 Use null if the digits are not clearly readable. Never guess.
 Answer ONLY with JSON: {{"values":[{{"c":1,"value":"00.09"}}]}}"""
 
@@ -278,6 +279,19 @@ def parse_value(v, unit):
     x = float(s)
     return x if 0 <= x < 10 else None
 
+def disp_value(v, unit):
+    """測定器の表示どおりの文字 (前の余分な 0 だけ外す: 00.09 → 0.09 · 0.130 はそのまま) · 使えなければ None"""
+    if parse_value(v, unit) is None: return None
+    s = str(v).strip().replace(",", ".")
+    s = re.sub(r"^0+(?=\d)", "", s)
+    return "0" + s if s.startswith(".") else s
+
+def decimal_shift(a, b):
+    """2 つの値が 10 倍 · 100 倍だけ違う (小数点の読み違い)"""
+    if a is None or b is None or a == 0 or b == 0: return False
+    r = max(a, b) / min(a, b)
+    return any(abs(r - k) < 1e-6 * k for k in (10, 100, 1000))
+
 def valid_box(b):
     if not isinstance(b, list) or len(b) != 4: return None
     try: n = [int(round(float(x))) for x in b]
@@ -313,6 +327,8 @@ def finalize(photos, ai_rows, set_name):
             "rr_point": None,
             "rr_value": parse_value(r.get("value"), r.get("unit")) if screen else None,
             "rr_value2": None,
+            "rr_value_disp": disp_value(r.get("value"), r.get("unit")) if screen else None,
+            "rr_stamp_time": bool(re.search(r"\d{1,2}:\d{2}", str(r.get("stamp") or ""))),
             "rr_box": valid_box(r.get("box")),
             "rr_screen_ok": screen,
             "rr_device": (str(r["device"]).strip()[:40] if r.get("device") else None),
@@ -405,7 +421,25 @@ def read_set(g, ai, cfg, set_name, items, log):
                 try: vals[int(v.get("c"))] = v.get("value")
                 except Exception: pass
             for n, (i, r) in enumerate(targets, 1):
-                r["rr_value2"] = parse_value(vals.get(n), None)
+                v2 = parse_value(vals.get(n), None)
+                if decimal_shift(r["rr_value"], v2):
+                    v2 = None; r["rr_value2_note"] = "decimal"        # 小数点の読み違い → null (TOOL で 1 つずつ確認)
+                r["rr_value2"] = v2
+            # 3 回目: 2 回目が null か 1 回目と違う写真だけ · 枠を広めに切り出して もう一度 (同じなら 2 回目として採用)
+            retry = [(i, r) for i, r in targets if r["rr_value"] is not None and r["rr_value2"] != r["rr_value"]]
+            if retry:
+                crops3 = [crop_jpeg(photos[i]["full"], r["rr_box"], margin=0.45) for i, r in retry]
+                ans3 = ai.ask(PROMPT_VALUE.format(n=len(crops3)), crops3, [f"C{n}" for n in range(1, len(crops3) + 1)],
+                              max_tokens=tokens_for(len(crops3), 60, 800))
+                vals3 = {}
+                for v in ans3.get("values", []):
+                    try: vals3[int(v.get("c"))] = v.get("value")
+                    except Exception: pass
+                for n, (i, r) in enumerate(retry, 1):
+                    v3 = parse_value(vals3.get(n), None)
+                    if v3 is not None and abs(v3 - r["rr_value"]) < 1e-9:
+                        r["rr_value2"] = v3
+                        r["rr_value2_note"] = (r.get("rr_value2_note", "") + "+retry").lstrip("+")   # 例 decimal+retry (記録は残す)
     for p, r in zip(photos, recs):
         r["rr_sharp"] = sharpness(p["im"], r["rr_box"])
     fp = fingerprint(items)

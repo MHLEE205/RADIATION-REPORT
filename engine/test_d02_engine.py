@@ -105,7 +105,7 @@ g, ai = FakeGraph(), FakeAI()
 ch = E.read_iv(g, ai, cfg, "NAS2611-08", False, False, log)
 out = g.written.get("RR_READ/NAS2611-08.json")
 ok(ch and out is not None, "RR_READ/NAS2611-08.json に書いた")
-ok(ai.calls == [14, 13], f"AI 呼び出し 2 回 (セット 14 枚 · 画面の枠 13 枚) → {ai.calls}")
+ok(ai.calls[:2] == [14, 13] and len(ai.calls) == 3, f"AI 呼び出し (セット 14 · 画面の枠 13 · 7.0.3 から 合わない写真だけ 3 回目) → {ai.calls}")
 ph = out["sets"][0]["photos"]
 ok([p["file"] for p in ph][:3] == ["IMG_8972.JPG", "IMG_8973.JPG", "IMG_8974.JPG"], "撮影順 (EXIF) に並ぶ")
 ok(all(p["rr_taken"].startswith("2026-11-19") and p["rr_taken_src"] == "exif" for p in ph), "撮影日時 = EXIF")
@@ -193,6 +193,37 @@ class G5:
     def children(self, rel=None, item_id=None):
         return [{"name": "OLD2601-01", "folder": {}, "lastModifiedDateTime": "2026-01-01T00:00:00Z"}, {"name": "_actions", "folder": {}}]
 ok(E.recent_ivs(G5(), {"photo_root": "PV2", "since_days": 0}) == ["OLD2601-01"], "since_days 0 → 古い IV フォルダも見る (_ で始まるものは除く)")
+
+
+print("■ 7.0.3 表示どおり · 時刻 · 小数点 · 3 回目")
+ok(E.disp_value("00.09", "μSv/h") == "0.09" and E.disp_value("0.130", "μSv/h") == "0.130" and E.disp_value("0.20", None) == "0.20", "表示どおり (00.09→0.09 · 0.130 · 0.20)")
+ok(E.disp_value("0.1?", "μSv/h") is None and E.disp_value("0.13", "CPM") is None, "読めない · 単位違い → None")
+ok(E.decimal_shift(0.045, 0.45) and E.decimal_shift(0.13, 13.0) and not E.decimal_shift(0.13, 0.15) and not E.decimal_shift(0.13, None), "10 倍 · 100 倍違い = 小数点の読み違い")
+rr = E.finalize([{"file": "a.jpg", "taken": ""}, {"file": "b.jpg", "taken": ""}],
+                [{"p": 1, "kind": "bg", "value": "0.20", "unit": "μSv/h", "stamp": "2026-11-19 14:27"},
+                 {"p": 2, "kind": "bg", "value": "00.09", "unit": "μSv/h", "stamp": "2026-11-19"}], "20261119_0900_x")
+ok(rr[0]["rr_value_disp"] == "0.20" and rr[1]["rr_value_disp"] == "0.09", "finalize: rr_value_disp")
+ok(rr[0]["rr_stamp_time"] is True and rr[1]["rr_stamp_time"] is False, "写真の日付に 時刻あり / なし")
+class AI3(FakeAI):
+    """1 回目 0.045 ×12 · 2 回目 0.45 (小数点違い) と null · 3 回目 0.045"""
+    def __init__(self): super().__init__(); self.n = 0
+    def ask(self, prompt, images, labels, max_tokens=4000):
+        self.calls.append(len(images)); self.n += 1
+        if prompt.startswith("You are reading"):
+            ks = ["bg"] * 4 + ["m1"] * 4 + ["sf"] * 4
+            return {"photos": [{"p": i + 1, "session": "S1", "kind": ks[i], "value": "0.045", "unit": "μSv/h", "screen_on": True,
+                                "box": [300, 300, 700, 600], "device": "X", "stamp": "2026-11-19"} for i in range(len(images))]}
+        if self.n == 2:
+            return {"values": [{"c": i + 1, "value": ("0.45" if i < 6 else (None if i < 9 else "0.045"))} for i in range(len(images))]}
+        return {"values": [{"c": i + 1, "value": ("0.045" if i < 7 else None)} for i in range(len(images))]}
+g6, ai6 = Graph2(), AI3()
+g6.sets = {"20261119_0859_early": g6.sets["20261119_0859_early"]}
+E.read_iv(g6, ai6, cfg, "IV2", False, False, log)
+ph6 = g6.written["RR_READ/IV2.json"]["sets"][0]["photos"]
+ok(ai6.calls == [12, 12, 9], f"AI 3 回 (セット 12 · 枠 12 · 合わない 9 枚だけ 3 回目) → {ai6.calls}")
+ok(sum(1 for p in ph6 if "decimal" in p.get("rr_value2_note", "")) == 6, "10 倍の読み 6 枚 → 小数点の読み違いとして記録 (3 回目で直っても残る)")
+ok(sum(1 for p in ph6 if p["rr_value2"] == 0.045) == 3 + 7 and sum(1 for p in ph6 if p["rr_value2"] is None) == 2, "3 回目で一致した 7 枚を採用 · 残り 2 枚は null (TOOL で 1 つずつ確認)")
+ok(all(p["rr_value_disp"] == "0.045" for p in ph6), "表示どおり 0.045")
 
 print(f"\n結果: {P} OK · {F} NG")
 sys.exit(1 if F else 0)

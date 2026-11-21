@@ -114,6 +114,8 @@ input[type="date"]{color-scheme:dark;}
 .vf-item.ok{border-color:var(--ok);}
 .vf-item.bad{border-color:var(--error);}
 .vf-item.todo{border-color:var(--warn);}
+.vf-item.check{border-color:#f97316;border-style:dashed;}
+.vf-st.check{color:#f97316;}
 .vf-head{font-size:10px;font-weight:700;margin-bottom:4px;display:flex;justify-content:space-between;}
 .vf-crop{width:100%;height:110px;object-fit:contain;background:#000;border-radius:4px;display:block;cursor:zoom-in;}
 .vf-crop.big{height:320px;cursor:zoom-out;}
@@ -199,6 +201,7 @@ input[type="date"]{color-scheme:dark;}
         <div class="form-group">
           <label class="form-label">測定日（写真の撮影日 · そのまま）</label>
           <input type="date" id="measDate">
+          <input type="text" id="measTime" placeholder="14:27~14:28" style="width:110px;margin-left:4px;" title="時:分 (最初〜最後の写真の撮影時刻)">
           <div class="src-note" id="measSrc"></div>
         </div>
         <div class="form-group" id="vendorGroup" style="display:none;">
@@ -303,7 +306,10 @@ input[type="date"]{color-scheme:dark;}
    使える写真 = 本当の撮影日が CY CUT の 2 日前まで (形님 決定 2026-11-21) · 写真の日付は変えない (文字を入れない)。
    複数の組 (セット · 測定) = ① 合格 ② 写真が鮮明 の順で自動選択。
    数値 = AI の読み取り (未確認) — 担当者が写真と見比べて確認するまで確定できない (OCR は 100% ではない)。
-   報告書の様式 (表 · 写真の並び · キャプション · Word) は v6.0 のまま。 */
+   報告書の様式 (表 · 写真の並び · キャプション · Word) は v6.0 のまま。
+   v7.0.1 (2026-11-21 形님): 数値 = 測定器の画面の表示どおり (0.20 → 0.20) · b/a 小数 4 桁 · 測定日に 時:分 (最初〜最後の写真)
+     · 時刻が写っていない写真には 本当の撮影時刻 (EXIF) を角に小さく表示 (元の文字は隠さない · 住所などはそのまま)
+     · 2 回目が読めなかった数値は 1 つずつ写真を見て ✓ (まとめて確認の対象外) · 自動選択は 手で確認する数値が少ない組を先に */
 
 /* ── 設定 (この 1 か所だけ) ── */
 const RR_CFG={
@@ -335,6 +341,7 @@ function commonMissing(){
 }
 
 const S={
+  disp:{bg:[null,null,null,null],m1:[null,null,null,null],sf:[null,null,null,null]},
   selectedIV:null,
   confirmed:false,
   meas:'',
@@ -362,7 +369,7 @@ function startTool(){
 LEENAI.init({
   sys:'D-02',
   name:'放射線測定 報告書',
-  version:'7.0',
+  version:'7.0.1',
   date:'2026-11-21',
   desc:'COMPASS と SharePoint (PHOTO_V2) の写真から放射性物質簡易測定結果報告書を作成します',
   redirectUri:'https://mhlee205.github.io/RADIATION-REPORT/',
@@ -741,7 +748,7 @@ async function loadRR(ivNo){
     const fail=full.filter(s=>s.plan.pass===false);
     if(fail.length)log(`⚠ 不合格になる組があります (${fail.map(s=>s.label).join(' · ')}) — 内容を確認してください`,'err');
     const pool=pass.length?pass:full.filter(s=>s.plan.pass===null);
-    pool.sort((a,b)=>(a.plan.warn-b.plan.warn)||(b.plan.sharp-a.plan.sharp));   /* 警告の少ない組 → 鮮明な組 */
+    pool.sort((a,b)=>(a.plan.warn-b.plan.warn)||(a.plan.need-b.plan.need)||(b.plan.sharp-a.plan.sharp));   /* 警告の少ない組 → 手で確認する数値が少ない組 → 鮮明な組 */
     const auto=pool[0]||null;
     renderSetGrid(auto?auto.id:null);
     if(auto){
@@ -785,6 +792,7 @@ function buildGroups(label,items,kind,read){
       recv, vendor:'',
       takenSrc:k.rr_taken?(k.rr_taken_src||'engine'):((it.photo&&it.photo.takenDateTime)?'exif':''),
       eng:{kind:k.rr_kind||null,point:numOrNull(k.rr_point),value:numOrNull(k.rr_value),value2:numOrNull(k.rr_value2),
+           disp:k.rr_value_disp?normDisp(k.rr_value_disp):null,stampTime:(k.rr_stamp_time===true||k.rr_stamp_time===false)?k.rr_stamp_time:null,
            box:validBox(k.rr_box),sharp:numOrNull(k.rr_sharp),screenOk:k.rr_screen_ok!==false,
            session:k.rr_session||'',device:k.rr_device||(kind&&kind.rr_device)||''},
       sha16:k.sha16||''
@@ -800,6 +808,24 @@ function validBox(b){
   if(n.some(x=>isNaN(x)||x<0||x>1000)||n[2]<=n[0]||n[3]<=n[1])return null;
   return n;
 }
+/* 測定器の表示どおりの文字 (前の余分な 0 だけ外す: 00.09 → 0.09 · 0.130 はそのまま) */
+function normDisp(s){
+  if(s===null||s===undefined)return null;
+  let t=String(s).trim().replace(',','.');
+  if(!/^\d*\.?\d+$/.test(t))return null;
+  t=t.replace(/^0+(?=\d)/,'');
+  if(t.startsWith('.'))t='0'+t;
+  return t;
+}
+/* 報告書に出す数値の文字 */
+function valText(key,i){
+  const s=S.disp&&S.disp[key]&&S.disp[key][i];
+  if(s)return s;
+  const v=S.values[key][i];
+  return (v===null||v===undefined||isNaN(v))?'':String(v);
+}
+/* 写真の時刻 HH:MM (分からなければ '') */
+function hhmm(f){const m=(f&&f.taken||'').match(/ (\d{2}:\d{2})$/);return m?m[1]:'';}
 function numOrNull(v){const n=(v===null||v===undefined||v==='')?NaN:Number(v);return isNaN(n)?null:n;}
 /* 'YYYY-MM-DD HH:MM' に揃える (ISO · 'YYYY:MM:DD HH:MM:SS' · 'YYYY/MM/DD HH:MM') — 読めなければ '' */
 function normTaken(v){
@@ -862,15 +888,23 @@ function planGroup(g){
       .sort((a,b)=>(b.sharp||0)-(a.sharp||0)).slice(0,RR_CFG.need);
   });
   const complete=KEYS.every(k=>pick[k].length>=RR_CFG.need);
-  let pass=null,sharp=0,warn=0;
+  let pass=null,sharp=0,warn=0,need=0;
   if(complete){
     const chosen=KEYS.flatMap(k=>pick[k]);
     sharp=chosen.reduce((a,f)=>a+(f.sharp||0),0)/chosen.length;
     warn=chosen.filter(f=>isWarn(f)).length;
+    need=chosen.filter(f=>engNeedsHand(f)).length;
     const vals={};KEYS.forEach(k=>{vals[k]=pick[k].map(f=>f.eng.value);});
     if(KEYS.every(k=>vals[k].every(v=>v!==null)))pass=judge(vals).ok;
   }
-  return {pick,complete,pass,sharp,warn};
+  return {pick,complete,pass,sharp,warn,need};
+}
+/* 手で確認が必要になる数値か (読めない · 2 回が違う · 2 回目が読めない) */
+function engNeedsHand(f){
+  const e=f.eng;
+  if(e.value===null)return true;
+  if(e.value2===null)return true;
+  return Math.abs(e.value-e.value2)>1e-9;
 }
 /* CY CUT 2〜1日前 (確定時に聞く) */
 function isWarn(f){const s=dateState(f);return s==='warn'||s==='recv_warn';}
@@ -924,7 +958,7 @@ function selectSet(id){
   if(!set)return;
   // 区分の初期値 = 組の自動案 (鮮明な 4 枚) · 残りは 未選択
   selState=set.files.map((f,seq)=>({file:f,seq,orig:f.orig,b64:f.orig,category:null,point:null,
-    value:f.eng.value,verified:false,manual:false}));
+    value:f.eng.value,disp:f.eng.disp||(f.eng.value!==null?String(f.eng.value):null),verified:false,manual:false}));
   const plan=set.plan||planGroup(set);
   KEYS.forEach(k=>{
     plan.pick[k].forEach(f=>{const s=selState.find(x=>x.file===f);if(s){s.category=k;s.point=f.eng.point;}});
@@ -960,13 +994,16 @@ function fillMeasAndDevice(set){
   const dates=[...new Set(chosen.map(s=>measDateOf(s.file)).filter(Boolean))].sort();
   const st=chosen.map(s=>dateState(s.file));
   const dsrc=chosen.some(s=>s.file.taken)?'写真の撮影日':chosen.some(s=>s.file.vendor)?'業者確認の撮影日':'撮影日不明 · メール受信日';
+  const mt=document.getElementById('measTime');
+  const times=chosen.filter(s=>measDateOf(s.file)===dates[0]&&hhmm(s.file)).map(s=>hhmm(s.file)).sort();
+  mt.value=times.length?(times[0]===times[times.length-1]?times[0]:`${times[0]}~${times[times.length-1]}`):'';
   if(dates.length){
     md.value=dates[0];
     const multi=dates.length>1,warn=st.includes('recv_warn')||st.includes('warn');
     ms.textContent=dsrc+(multi?`（${dates.join(' · ')} · 日付が複数 · 要確認）`:'')+(warn?` · ⚠ CY CUT ${RR_CFG.cutDays}〜1日前 (確定時に確認)`:'');
     ms.style.color=(multi||warn||dsrc!=='写真の撮影日')?'var(--warn)':'var(--text2)';
   }else{
-    md.value='';
+    md.value='';mt.value='';
     ms.textContent='撮影日が分かりません — 業者に確認して入力してください';
     ms.style.color='var(--warn)';
   }
@@ -1115,7 +1152,11 @@ function updateSelectionStatus(){
 }
 
 // ── 数値の確認 (OCR は 100% ではない → 担当者が写真と見比べて確認するまで確定できない) ──
-/* 1 つの値の状態: 'todo' (AI の読み取り · 未確認) · 'bad' (要入力: 読み取り無し · 2 回の読みが違う · あり得ない値) · 'ok' (確認済) */
+/* 1 つの値の状態:
+   'todo'  (AI の読み取り · 2 回同じ · 未確認 → 「全部同じ」 でまとめて確認できる)
+   'check' (2 回目が読めなかった → 1 つずつ写真を見て ✓)
+   'bad'   (要入力: 読み取り無し · 2 回の読みが違う · あり得ない値)
+   'ok'    (確認済) */
 function valueState(item){
   const v=item.value;
   if(v===null||v===undefined||isNaN(v))return 'bad';
@@ -1123,6 +1164,7 @@ function valueState(item){
   const e=item.file.eng;
   if(!item.manual&&e.value!==null&&e.value2!==null&&Math.abs(e.value-e.value2)>1e-9&&v===e.value)return 'bad';
   if(item.verified)return 'ok';
+  if(!item.manual&&e.value2===null)return 'check';
   return 'todo';
 }
 function valueReason(item){
@@ -1131,6 +1173,7 @@ function valueReason(item){
   if(v<0||v>=10)return 'あり得ない値 — 写真を見て入力';
   if(!item.manual&&e.value!==null&&e.value2!==null&&Math.abs(e.value-e.value2)>1e-9&&v===e.value)return `読み取りが 2 回で違う (${e.value} / ${e.value2}) — 写真を見て入力`;
   if(item.verified)return item.manual?'入力済':'確認済';
+  if(!item.manual&&e.value2===null)return '2 回目が読めない — 写真を見て ✓';
   return 'AI の読み取り · 未確認';
 }
 
@@ -1149,9 +1192,9 @@ function renderValueGrid(){
         <div class="vf-head"><span style="color:${color[key]};">${label[key]} 地点${i+1}</span><span class="vf-st ${over?'bad':st}">${over?`${RR_CFG.maxVal} を超えています`:esc(valueReason(item))}</span></div>
         <img class="vf-crop" id="vfc_${idx}" alt="" onclick="this.classList.toggle('big')">
         <div class="vf-row">
-          <input type="number" step="0.001" min="0" value="${item.value!==null&&item.value!==undefined?item.value:''}" placeholder="—" onchange="updateValue(${idx},this.value)">
+          <input type="text" inputmode="decimal" value="${esc(item.disp||'')}" placeholder="—" onchange="updateValue(${idx},this.value)">
           <span style="font-size:11px;color:var(--text2);">μSv/h</span>
-          ${st==='todo'?`<button class="btn btn-ghost btn-sm" onclick="verifyOne(${idx})">✓ 同じ</button>`:''}
+          ${(st==='todo'||st==='check')?`<button class="btn btn-ghost btn-sm" onclick="verifyOne(${idx})">✓ 同じ</button>`:''}
         </div>`;
       grid.appendChild(div);
       makeCrop(item).then(u=>{const im=document.getElementById(`vfc_${idx}`);if(im&&u)im.src=u;});
@@ -1188,12 +1231,13 @@ function makeCrop(item){
 
 function verifyOne(idx){
   const it=selState[idx];
-  if(valueState(it)!=='todo')return;
+  const st=valueState(it);
+  if(st!=='todo'&&st!=='check')return;
   it.verified=true;
   S.confirmed=false;setOutputEnabled(false);
   renderValueGrid();calcResults();
 }
-/* 「全部同じでした」 = 未確認 (AI の読み取り) をまとめて確認済に · 要入力 (赤) は対象外 — 手で入れるまで残る */
+/* 「全部同じでした」 = 未確認 (AI の読み取り · 2 回同じ) をまとめて確認済に · 'check' (2 回目なし) と 要入力 (赤) は対象外 */
 function verifyAll(){
   let n=0;
   KEYS.forEach(k=>catItems(k).forEach(it=>{if(valueState(it)==='todo'){it.verified=true;n++;}}));
@@ -1204,8 +1248,10 @@ function verifyAll(){
 
 function updateValue(idx,val){
   const it=selState[idx];
-  const n=val===''?null:parseFloat(val);
+  const d=normDisp(val);
+  const n=d===null?null:parseFloat(d);
   it.value=(n===null||isNaN(n))?null:n;
+  it.disp=d;
   it.manual=true;
   it.verified=it.value!==null;     /* 担当者が自分で入れた値 = 確認済 */
   S.confirmed=false;setOutputEnabled(false);
@@ -1215,17 +1261,17 @@ function updateValue(idx,val){
 function updateVerifyButtons(){
   const items=KEYS.flatMap(k=>catItems(k).slice(0,RR_CFG.need));
   const st=items.map(valueState);
-  const todo=st.filter(s=>s==='todo').length,bad=st.filter(s=>s==='bad').length;
+  const todo=st.filter(s=>s==='todo').length,bad=st.filter(s=>s==='bad').length,chk=st.filter(s=>s==='check').length;
   const ab=document.getElementById('verifyAllBtn');if(ab)ab.disabled=!todo;
   const cb=document.getElementById('confirmBtn'),h=document.getElementById('confirmHint');
-  const ready=items.length===RR_CFG.need*3&&!todo&&!bad;
+  const ready=items.length===RR_CFG.need*3&&!todo&&!bad&&!chk;
   if(cb)cb.disabled=!ready;
-  if(h)h.textContent=ready?'':(bad?`入力が必要 ${bad}個`:'')+(bad&&todo?' · ':'')+(todo?`未確認 ${todo}個`:'');
+  if(h)h.textContent=ready?'':[bad?`入力が必要 ${bad}個`:'',chk?`1 つずつ確認 ${chk}個`:'',todo?`未確認 ${todo}個`:''].filter(Boolean).join(' · ');
 }
 
 /* 選んだ写真 → S.values (地点順) */
 function syncValues(){
-  KEYS.forEach(k=>{const it=catItems(k);for(let i=0;i<4;i++)S.values[k][i]=it[i]?it[i].value:null;});
+  KEYS.forEach(k=>{const it=catItems(k);for(let i=0;i<4;i++){S.values[k][i]=it[i]?it[i].value:null;S.disp[k][i]=it[i]?(it[i].disp||null):null;}});
 }
 
 function calcResults(){
@@ -1235,7 +1281,7 @@ function calcResults(){
   document.getElementById('avgA').textContent=fmtN(j.a);
   document.getElementById('avgM1').textContent=fmtN(j.m);
   document.getElementById('avgB').textContent=fmtN(j.b);
-  document.getElementById('ratio').textContent=j.ratio===null?'—':j.ratio.toFixed(1);
+  document.getElementById('ratio').textContent=j.ratio===null?'—':j.ratio.toFixed(4);
   const verdict=j.verdict===null?'—':j.verdict==='pass'?'合格':(j.over?`不合格（${RR_CFG.maxVal} 超え ${j.over}個）`:'不合格');
   const vEl=document.getElementById('verdict');vEl.textContent=verdict;
   vEl.className='result-val '+(j.verdict==='pass'?'ok':j.verdict==='fail'?'fail':'');
@@ -1262,7 +1308,9 @@ async function confirmSelection(){
   const nWarn=items.filter(it=>isWarn(it.file)).length;
   if(nWarn&&!confirm(`CY CUT ${RR_CFG.cutDays}日前を過ぎた写真が ${nWarn}枚 あります（CY CUT ${S.selectedIV.cyCut} · 撮影日または受信日 ${[...new Set(items.filter(it=>isWarn(it.file)).map(it=>measDateOf(it.file)))].join(' · ')}）。このまま使いますか？`))return;
   if(last&&meas>last&&!nWarn&&!confirm(`測定日 ${meas} が CY CUT ${RR_CFG.cutDays}日前 (${last}) より後です。このまま進めますか？`))return;
-  S.meas=meas;
+  const mtime=(document.getElementById('measTime').value||'').trim();
+  if(mtime&&!/^\d{1,2}:\d{2}(~\d{1,2}:\d{2})?$/.test(mtime)){alert('時:分 の形が正しくありません（例 14:27 または 14:27~14:28）。');document.getElementById('measTime').focus();return;}
+  S.meas=meas+(mtime?' '+mtime:'');
   showLoading('写真を準備中...');
   try{
     await preparePhotos();
@@ -1286,10 +1334,10 @@ async function writeConfirmLog(){
   const set=photoSets.find(s=>s.id===selectedSetId)||{};
   const rec={
     action_id:id, type:'rr_confirm', at:now.toISOString(), by:(LEENAI.user&&LEENAI.user.email)||'',
-    tool:'D-02 v7.0', iv_no:S.selectedIV?.ivNo||'', set:set.label||'', cy_cut:S.selectedIV?.cyCut||'',
+    tool:'D-02 v7.0.1', iv_no:S.selectedIV?.ivNo||'', set:set.label||'', cy_cut:S.selectedIV?.cyCut||'',
     meas_date:S.meas, device:currentTool(),
     vendor_date:set.vendorDate||'',
-    photos:selState.map(s=>({file:s.file.name,sha16:s.file.sha16||'',taken:s.file.taken||'',taken_src:s.file.takenSrc||'',received:s.file.recv||'',date_state:dateState(s.file),kind:s.category,
+    photos:selState.map(s=>({file:s.file.name,sha16:s.file.sha16||'',taken:s.file.taken||'',taken_src:s.file.takenSrc||'',received:s.file.recv||'',date_state:dateState(s.file),kind:s.category,disp:s.category?(s.disp||null):null,
       point:s.category?catItems(s.category).indexOf(s)+1:null,value:s.category?s.value:null,manual:!!s.manual,
       engine:{kind:s.file.eng.kind,point:s.file.eng.point,value:s.file.eng.value,value2:s.file.eng.value2}}))
   };
@@ -1327,7 +1375,7 @@ function generatePDF(){
 
   function photoCell(p,val,label){
     const src=p?.b64?`data:image/jpeg;base64,${p.b64}`:null;
-    const valStr=(val!==null&&val!==undefined&&!isNaN(val))?`${Number(val).toFixed(3).replace(/0+$/,'').replace(/\.$/,'')} μSv/h`:'—';
+    const valStr=val?`${val} μSv/h`:'—';   /* v7.0.1: 測定器の表示どおり */
     return `<td class="pc">
       <div class="plabel">${label}</div>
       <div class="pval">&lt;측정값 : ${valStr}&gt;</div>
@@ -1424,7 +1472,7 @@ h1{font-size:15pt;font-weight:700;text-align:center;margin-bottom:10px;letter-sp
     <td class="val">${tool}</td>
     <td class="val">${meas}</td>
     <td class="val">0.3</td>
-    <td class="val">${ratio!==null?ratio.toFixed(1):''}</td>
+    <td class="val">${ratio!==null?ratio.toFixed(4):''}</td>
     <td class="verdict">${verdict}</td>
   </tr>
   <!-- 배경 : 빈 여백 행 + 섹션헤더 + 지점헤더 + 수치 -->
@@ -1440,10 +1488,10 @@ h1{font-size:15pt;font-weight:700;text-align:center;margin-bottom:10px;letter-sp
     <td class="pt-header">평균(a)</td>
   </tr>
   <tr>
-    <td class="val">${fmtV(S.values.bg[0])}</td>
-    <td class="val">${fmtV(S.values.bg[1])}</td>
-    <td class="val">${fmtV(S.values.bg[2])}</td>
-    <td class="val">${fmtV(S.values.bg[3])}</td>
+    <td class="val">${valText('bg',0)}</td>
+    <td class="val">${valText('bg',1)}</td>
+    <td class="val">${valText('bg',2)}</td>
+    <td class="val">${valText('bg',3)}</td>
     <td class="val avg-plain">${fmtV(avgA)}</td>
   </tr>
   <!-- 1m이격 -->
@@ -1459,10 +1507,10 @@ h1{font-size:15pt;font-weight:700;text-align:center;margin-bottom:10px;letter-sp
     <td class="pt-header">평균</td>
   </tr>
   <tr>
-    <td class="val">${fmtV(S.values.m1[0])}</td>
-    <td class="val">${fmtV(S.values.m1[1])}</td>
-    <td class="val">${fmtV(S.values.m1[2])}</td>
-    <td class="val">${fmtV(S.values.m1[3])}</td>
+    <td class="val">${valText('m1',0)}</td>
+    <td class="val">${valText('m1',1)}</td>
+    <td class="val">${valText('m1',2)}</td>
+    <td class="val">${valText('m1',3)}</td>
     <td class="val avg-plain">${fmtV(avgM1)}</td>
   </tr>
   <!-- 표면 -->
@@ -1478,10 +1526,10 @@ h1{font-size:15pt;font-weight:700;text-align:center;margin-bottom:10px;letter-sp
     <td class="pt-header">평균(b)</td>
   </tr>
   <tr>
-    <td class="val">${fmtV(S.values.sf[0])}</td>
-    <td class="val">${fmtV(S.values.sf[1])}</td>
-    <td class="val">${fmtV(S.values.sf[2])}</td>
-    <td class="val">${fmtV(S.values.sf[3])}</td>
+    <td class="val">${valText('sf',0)}</td>
+    <td class="val">${valText('sf',1)}</td>
+    <td class="val">${valText('sf',2)}</td>
+    <td class="val">${valText('sf',3)}</td>
     <td class="val avg-plain">${fmtV(avgB)}</td>
   </tr>
   <tr><td colspan="5" style="height:6px;border:none;background:#fff;"></td></tr>
@@ -1502,16 +1550,16 @@ h1{font-size:15pt;font-weight:700;text-align:center;margin-bottom:10px;letter-sp
 <div class="page">
 <div class="ptitle">＜측정 사진＞</div>
 <table class="ptbl"><tr>
-  ${photoCell(S.photos.bg[0],S.values.bg[0],'배경(10m이격)1')}
-  ${photoCell(S.photos.bg[1],S.values.bg[1],'배경(10m이격)2')}
-  ${photoCell(S.photos.bg[2],S.values.bg[2],'배경(10m이격)3')}
-  ${photoCell(S.photos.bg[3],S.values.bg[3],'배경(10m이격)4')}
+  ${photoCell(S.photos.bg[0],valText('bg',0),'배경(10m이격)1')}
+  ${photoCell(S.photos.bg[1],valText('bg',1),'배경(10m이격)2')}
+  ${photoCell(S.photos.bg[2],valText('bg',2),'배경(10m이격)3')}
+  ${photoCell(S.photos.bg[3],valText('bg',3),'배경(10m이격)4')}
 </tr></table>
 <table class="ptbl"><tr>
-  ${photoCell(S.photos.m1[0],S.values.m1[0],'폐기물(1m이격)1')}
-  ${photoCell(S.photos.m1[1],S.values.m1[1],'폐기물(1m이격)2')}
-  ${photoCell(S.photos.m1[2],S.values.m1[2],'폐기물(1m이격)3')}
-  ${photoCell(S.photos.m1[3],S.values.m1[3],'폐기물(1m이격)4')}
+  ${photoCell(S.photos.m1[0],valText('m1',0),'폐기물(1m이격)1')}
+  ${photoCell(S.photos.m1[1],valText('m1',1),'폐기물(1m이격)2')}
+  ${photoCell(S.photos.m1[2],valText('m1',2),'폐기물(1m이격)3')}
+  ${photoCell(S.photos.m1[3],valText('m1',3),'폐기물(1m이격)4')}
 </tr></table>
 <div class="footer">✦ Powered by LEENAI Automation System</div>
 </div>
@@ -1519,10 +1567,10 @@ h1{font-size:15pt;font-weight:700;text-align:center;margin-bottom:10px;letter-sp
 <!-- ══ PAGE 3 ══ -->
 <div class="page">
 <table class="ptbl"><tr>
-  ${photoCell(S.photos.sf[0],S.values.sf[0],'폐기물(표면)1')}
-  ${photoCell(S.photos.sf[1],S.values.sf[1],'폐기물(표면)2')}
-  ${photoCell(S.photos.sf[2],S.values.sf[2],'폐기물(표면)3')}
-  ${photoCell(S.photos.sf[3],S.values.sf[3],'폐기물(표면)4')}
+  ${photoCell(S.photos.sf[0],valText('sf',0),'폐기물(표면)1')}
+  ${photoCell(S.photos.sf[1],valText('sf',1),'폐기물(표면)2')}
+  ${photoCell(S.photos.sf[2],valText('sf',2),'폐기물(표면)3')}
+  ${photoCell(S.photos.sf[3],valText('sf',3),'폐기물(표면)4')}
 </tr></table>
 <div class="notice-box">
   <h3>【방사능물질 간이측정결과 안내】</h3>
@@ -1561,11 +1609,17 @@ h1{font-size:15pt;font-weight:700;text-align:center;margin-bottom:10px;letter-sp
 // ── 報告書用の写真 (Canvas) ──
 /* v7.0: 写真の日付は変えない (文字を入れない · 写真に元からある日付をそのまま残す)。
    する事は 横長の写真を 90 度回して縦にする だけ (報告書の枠が縦長 · v6.0 と同じ向き)。 */
-async function toPortrait(b64){
+/* label があれば (時刻が写っていない写真) 縦にした後の 左上に 本当の撮影日時 を小さく書く — 元の文字は隠さない */
+async function toPortrait(b64,label){
   return new Promise((res)=>{
     const img=new Image();
     img.onload=()=>{
-      if(img.width<=img.height){res(b64);return;}
+      if(img.width<=img.height&&!label){res(b64);return;}
+      if(img.width<=img.height){
+        const c=document.createElement('canvas');c.width=img.width;c.height=img.height;
+        const x=c.getContext('2d');x.drawImage(img,0,0);drawLabel(x,c.width,label);
+        res(c.toDataURL('image/jpeg',0.92).split(',')[1]);return;
+      }
       // 横長の写真 → 90度 時計回りに回転
       const rotCanvas=document.createElement('canvas');
       rotCanvas.width=img.height; rotCanvas.height=img.width;
@@ -1575,6 +1629,7 @@ async function toPortrait(b64){
       rotCtx.rotate(Math.PI/2);
       rotCtx.drawImage(img,0,0);
       rotCtx.restore();
+      if(label)drawLabel(rotCtx,rotCanvas.width,label);
       res(rotCanvas.toDataURL('image/jpeg',0.92).split(',')[1]);
     };
     img.onerror=()=>res(b64);
@@ -1582,14 +1637,27 @@ async function toPortrait(b64){
   });
 }
 
+function drawLabel(ctx,w,label){
+  const fs=Math.max(12,Math.round(w*0.035));
+  ctx.font=`bold ${fs}px Arial`;
+  const pad=Math.round(fs*0.35),tw=ctx.measureText(label).width;
+  ctx.fillStyle='rgba(0,0,0,0.6)';ctx.fillRect(6,6,tw+pad*2,fs+pad*2);
+  ctx.fillStyle='#ffffff';ctx.fillText(label,6+pad,6+pad+fs*0.85);
+}
+
 async function preparePhotos(){
   const targets=selState.filter(s=>s.category);
+  let added=0;
   for(const item of targets){
     if(!item.orig)continue;
+    // 時刻が写っていない写真 (エンジン rr_stamp_time=false) で 本当の撮影時刻 (EXIF 等) がある時だけ 表示を足す
+    const t=item.file.taken||'';
+    const label=(item.file.eng.stampTime===false&&/ \d{2}:\d{2}$/.test(t))?t:'';
+    if(label)added++;
     // 何度確定しても 元の写真から作る
-    item.b64=await toPortrait(item.orig);
+    item.b64=await toPortrait(item.orig,label);
   }
-  log(`報告書用の写真 ${targets.length}枚 を準備しました（日付は写真のまま）`,'ok');
+  log(`報告書用の写真 ${targets.length}枚 を準備しました（写真の文字はそのまま${added?` · 時刻が写っていない ${added}枚 に撮影時刻を表示`:''}）`,'ok');
 }
 // ── 検査機器 その他 처리 ──
 function toggleInspOther(val){
@@ -1747,7 +1815,7 @@ async function generateWord(){
   const m1Rids=[0,1,2,3].map(i=>regImg(S.photos.m1[i]?.b64,`m1${i}`));
   const sfRids=[0,1,2,3].map(i=>regImg(S.photos.sf[i]?.b64,`sf${i}`));
 
-  const fmtVal=(key,i)=>{const v=S.values[key][i];return (v!==null&&v!==undefined&&!isNaN(v))?`${Number(v).toFixed(3).replace(/0+$/,'').replace(/\.$/,'')} μSv/h`:'—';};
+  const fmtVal=(key,i)=>{const s=valText(key,i);return s?`${s} μSv/h`:'—';};   /* v7.0.1: 測定器の表示どおり */
 
   // 전체 테이블 폭 (마진 포함): 11906-720-720=10466 twips
   const TW=10466;
@@ -1765,16 +1833,16 @@ async function generateWord(){
   ${wTr(wTc('선적 정보',{bold:true,center:true,shade:true,w:CW0}),wTc('선박명',{bold:true,center:true,shade:true,w:CW}),wTc('선적항(일본)',{bold:true,center:true,shade:true,w:CW}),wTc('선적일 입항(예정)일',{bold:true,center:true,shade:true,w:CW}),wTc('선적량(톤)',{bold:true,center:true,shade:true,w:CW}),wTc('입항항구(한국)',{bold:true,center:true,shade:true,w:CW}))}
   ${wTr(wTc('',{w:CW0}),wTc(iv.vessel||'',{w:CW}),wTc(iv.pol||'',{center:true,w:CW}),wTc(iv.blDate||'',{center:true,w:CW}),wTc(iv.nwMT||'',{center:true,w:CW}),wTc(iv.pod||'',{center:true,w:CW}))}
   ${wTr(wTc('검사 결과',{bold:true,center:true,shade:true,w:CW0}),wTc('검사도구',{bold:true,center:true,shade:true,w:CW}),wTc('측정일자',{bold:true,center:true,shade:true,w:CW}),wTc('기준',{bold:true,center:true,shade:true,w:CW}),wTc('방사선 증가율(b/a)',{bold:true,center:true,shade:true,w:CW}),wTc('판정',{bold:true,center:true,shade:true,w:CW}))}
-  ${wTr(wTc('',{w:CW0}),wTc(tool,{center:true,w:CW}),wTc(meas,{center:true,w:CW}),wTc('0.3',{center:true,w:CW}),wTc(ratio!==null?ratio.toFixed(1):'',{center:true,w:CW}),wTc(verdict,{center:true,bold:true,w:CW}))}
+  ${wTr(wTc('',{w:CW0}),wTc(tool,{center:true,w:CW}),wTc(meas,{center:true,w:CW}),wTc('0.3',{center:true,w:CW}),wTc(ratio!==null?ratio.toFixed(4):'',{center:true,w:CW}),wTc(verdict,{center:true,bold:true,w:CW}))}
   ${wTr(wTc('',{w:CW0}),wTc('배경(폐기물로부터 10M 이상 이격) 측정결과（μSv/h）',{bold:false,center:true,w:CW*5,colspan:5}))}
   ${wTr(wTc('',{w:CW0}),wTc('지점 1',{center:true,w:CW}),wTc('지점 2',{center:true,w:CW}),wTc('지점 3',{center:true,w:CW}),wTc('지점 4',{center:true,w:CW}),wTc('평균(a)',{center:true,bold:true,w:CW}))}
-  ${wTr(wTc('',{w:CW0}),wTc(fmtV(S.values.bg[0]),{center:true,w:CW}),wTc(fmtV(S.values.bg[1]),{center:true,w:CW}),wTc(fmtV(S.values.bg[2]),{center:true,w:CW}),wTc(fmtV(S.values.bg[3]),{center:true,w:CW}),wTc(fmtV(avgA),{center:true,bold:true,w:CW}))}
+  ${wTr(wTc('',{w:CW0}),wTc(valText('bg',0),{center:true,w:CW}),wTc(valText('bg',1),{center:true,w:CW}),wTc(valText('bg',2),{center:true,w:CW}),wTc(valText('bg',3),{center:true,w:CW}),wTc(fmtV(avgA),{center:true,bold:true,w:CW}))}
   ${wTr(wTc('',{w:CW0}),wTc('폐기물(1M 이격) 측정결과（μSv/h）',{center:true,w:CW*5,colspan:5}))}
   ${wTr(wTc('',{w:CW0}),wTc('지점 1',{center:true,w:CW}),wTc('지점 2',{center:true,w:CW}),wTc('지점 3',{center:true,w:CW}),wTc('지점 4',{center:true,w:CW}),wTc('평균',{center:true,bold:true,w:CW}))}
-  ${wTr(wTc('',{w:CW0}),wTc(fmtV(S.values.m1[0]),{center:true,w:CW}),wTc(fmtV(S.values.m1[1]),{center:true,w:CW}),wTc(fmtV(S.values.m1[2]),{center:true,w:CW}),wTc(fmtV(S.values.m1[3]),{center:true,w:CW}),wTc(fmtV(avgM1),{center:true,bold:true,w:CW}))}
+  ${wTr(wTc('',{w:CW0}),wTc(valText('m1',0),{center:true,w:CW}),wTc(valText('m1',1),{center:true,w:CW}),wTc(valText('m1',2),{center:true,w:CW}),wTc(valText('m1',3),{center:true,w:CW}),wTc(fmtV(avgM1),{center:true,bold:true,w:CW}))}
   ${wTr(wTc('',{w:CW0}),wTc('폐기물(표면) 측정결과（μSv/h）',{center:true,w:CW*5,colspan:5}))}
   ${wTr(wTc('',{w:CW0}),wTc('지점 1',{center:true,w:CW}),wTc('지점 2',{center:true,w:CW}),wTc('지점 3',{center:true,w:CW}),wTc('지점 4',{center:true,w:CW}),wTc('평균(b)',{center:true,bold:true,w:CW}))}
-  ${wTr(wTc('',{w:CW0}),wTc(fmtV(S.values.sf[0]),{center:true,w:CW}),wTc(fmtV(S.values.sf[1]),{center:true,w:CW}),wTc(fmtV(S.values.sf[2]),{center:true,w:CW}),wTc(fmtV(S.values.sf[3]),{center:true,w:CW}),wTc(fmtV(avgB),{center:true,bold:true,w:CW}))}
+  ${wTr(wTc('',{w:CW0}),wTc(valText('sf',0),{center:true,w:CW}),wTc(valText('sf',1),{center:true,w:CW}),wTc(valText('sf',2),{center:true,w:CW}),wTc(valText('sf',3),{center:true,w:CW}),wTc(fmtV(avgB),{center:true,bold:true,w:CW}))}
   </w:tbl>
   <w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/><w:tblBorders><w:insideH w:val="single" w:sz="4" w:color="555555"/><w:insideV w:val="single" w:sz="4" w:color="555555"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol/><w:gridCol/><w:gridCol/><w:gridCol/><w:gridCol/></w:tblGrid>
   ${wTr(wTc('측정업체명 :',{bold:true,w:1400}),wTc(exporterName(),{w:3600}),wTc('담당자 :',{bold:true,center:true,w:1200}),wTc(staff,{w:2000}),wTc('(印)',{center:true,w:1266}))}
