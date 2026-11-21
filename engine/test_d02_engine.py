@@ -151,7 +151,7 @@ g2, ai3 = Graph2(), GoodAI()
 E.read_iv(g2, ai3, cfg, "IV2", False, False, log)
 o2 = g2.written["RR_READ/IV2.json"]
 ok(o2.get("status") == "done" and o2.get("done_set") == "20261119_0859_early", "一番早いセット (11/19) で 完了")
-ok(len(o2["sets"]) == 1 and ai3.calls == [12, 12, 12], f"完了したら 残りのセット (11/20) は AI に出さない (セット · 枠 · 日付 = 1 セット分だけ) → {ai3.calls}")
+ok(len(o2["sets"]) == 1 and ai3.calls == [12, 12] + [1] * 24, f"完了したら 残りのセット (11/20) は AI に出さない (セット · 枠 · 日付 1 枚ずつ 2 回 = 1 セット分だけ) → {len(ai3.calls)} 回")
 ok(o2["sets"][0]["received"] == "2026-11-19" and o2["sets"][0]["undated"] == 12, "受信日 · 撮影日不明の枚数を記録")
 ai4 = GoodAI()
 ok(E.read_iv(g2, ai4, cfg, "IV2", False, False, log) is False and ai4.calls == [], "完了した IV は 翌日から読まない")
@@ -220,7 +220,7 @@ g6, ai6 = Graph2(), AI3()
 g6.sets = {"20261119_0859_early": g6.sets["20261119_0859_early"]}
 E.read_iv(g6, ai6, cfg, "IV2", False, False, log)
 ph6 = g6.written["RR_READ/IV2.json"]["sets"][0]["photos"]
-ok(ai6.calls == [12, 12, 9, 12], f"AI (セット 12 · 枠 12 · 合わない 9 枚だけ 3 回目 · 日付 12) → {ai6.calls}")
+ok(ai6.calls == [12, 12, 9] + [1] * 24, f"AI (セット 12 · 枠 12 · 合わない 9 枚だけ 3 回目 · 日付 1 枚ずつ 2 回) → {len(ai6.calls)} 回")
 ok(sum(1 for p in ph6 if "decimal" in p.get("rr_value2_note", "")) == 6, "10 倍の読み 6 枚 → 小数点の読み違いとして記録 (3 回目で直っても残る)")
 ok(sum(1 for p in ph6 if p["rr_value2"] == 0.045) == 3 + 7 and sum(1 for p in ph6 if p["rr_value2"] is None) == 2, "3 回目で一致した 7 枚を採用 · 残り 2 枚は null (TOOL で 1 つずつ確認)")
 ok(all(p["rr_value_disp"] == "0.045" for p in ph6), "表示どおり 0.045")
@@ -230,11 +230,15 @@ print("■ 7.0.4 写真の中の日付・時刻を もう一度読む")
 ok(E.norm_time("8:52") == "08:52" and E.norm_time("16:14") == "16:14" and E.norm_time("25:00") == "" and E.norm_time(None) == "", "時刻を揃える (8:52 → 08:52)")
 ok(E.stamp_crop_box({"_stamp_box": [700, 900, 990, 990]}) == [700, 900, 990, 990] and E.stamp_crop_box({}) == [0, 650, 1000, 1000], "日付の枠 · 無ければ 写真の下 35%")
 class StampAI(GoodAI):
+    """7.0.5: 1 枚ずつ 2 回 · n 回目の呼び出し = (n//2) 枚目
+       0 枚目: 違う日付 · 1 枚目: 時刻なし · 3 枚目: 2 回の時刻が違う (8:53 / 8:58) · 他: 2026-11-19 08:5x"""
+    def __init__(self): super().__init__(); self.k = 0
     def ask(self, prompt, images, labels, max_tokens=4000):
-        if prompt.startswith("Each image is a close crop of the date/time"):
-            self.calls.append(len(images))
-            # 1 枚目: 違う日付 (読み違い) · 2 枚目: 時刻なし · 残り: 2026-11-19 08:5x
-            return {"stamps": [{"s": i + 1, "date": ("2026-11-18" if i == 0 else "2026-11-19"), "time": (None if i == 1 else f"8:{50 + i % 10}")} for i in range(len(images))]}
+        if prompt.startswith("The image is a close crop of the date/time"):
+            self.calls.append(len(images)); i = self.k // 2; second = self.k % 2; self.k += 1
+            date = "2026-11-18" if i == 0 else "2026-11-19"
+            time = None if i == 1 else (("8:58" if second else "8:53") if i == 3 else f"8:{50 + i % 10}")
+            return {"date": date, "time": time}
         r = GoodAI.ask(self, prompt, images, labels, max_tokens)
         if prompt.startswith("You are reading"):
             for p in r["photos"]: p["stamp"] = "2026-11-19"; p["stamp_box"] = [700, 900, 990, 990]
@@ -243,7 +247,9 @@ g7, ai7 = Graph2(), StampAI()
 g7.sets = {"20261119_0859_early": g7.sets["20261119_0859_early"]}
 E.read_iv(g7, ai7, cfg, "IV2", False, False, log)
 ph7 = g7.written["RR_READ/IV2.json"]["sets"][0]["photos"]
-ok(ai7.calls == [12, 12, 12], f"日付・時刻の読み直しは AI 1 回 (12 枚まとめて) → {ai7.calls}")
+ok(ai7.calls[:2] == [12, 12] and ai7.calls[2:] == [1] * 24, f"日付・時刻は 1 枚ずつ 2 回 (12 × 2 = 24 回) → {len(ai7.calls[2:])} 回")
+ok(ph7[3]["rr_taken"] == "2026-11-19" and ph7[3]["rr_stamp_time"] is False and ph7[3].get("rr_stamp_note") == "time 08:53/08:58", "2 回の時刻が違う (08:53 / 08:58) → 時刻は使わない · 記録だけ")
+ok(len(set(p["rr_taken"] for p in ph7 if len(p["rr_taken"]) >= 16)) >= 8, "写真ごとに違う時刻を そのまま (全部同じに揃わない)")
 ok(ph7[0]["rr_taken"] == "2026-11-19" and ph7[0]["rr_stamp_time"] is False, "読み直しの日付が 先の日付と違う → 使わない")
 ok(ph7[1]["rr_taken"] == "2026-11-19" and ph7[1]["rr_stamp_time"] is False, "時刻が読めない → 日付だけ")
 ok(ph7[2]["rr_taken"] == "2026-11-19 08:52" and ph7[2]["rr_stamp_time"] is True and ph7[2]["rr_taken_src"] == "stamp", "時刻を読めた → 2026-11-19 08:52 (src stamp)")

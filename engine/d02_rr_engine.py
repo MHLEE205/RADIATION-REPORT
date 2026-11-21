@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 ✦ Powered by LEENAI Automation System
-D-02 RR 写真読み取りエンジン v7.0.4  (RPA PC · C:\\LEENAI_D02)
+D-02 RR 写真読み取りエンジン v7.0.5  (RPA PC · C:\\LEENAI_D02)
 
 する事 (1 日 1 回 · 夜 21:00 · 形님 決定 2026-11-21):
   1. SharePoint PHOTO_V2 の 最近更新された IV フォルダの _RR を見る (読むだけ · C-01 エンジンのファイルは変えない)
@@ -25,7 +25,7 @@ D-02 RR 写真読み取りエンジン v7.0.4  (RPA PC · C:\\LEENAI_D02)
 import argparse, base64, datetime as dt, hashlib, io, json, logging, os, re, sys, time
 import urllib.parse
 
-ENGINE_VER = "7.0.4"   # 7.0.4: 写真の中の日付・時刻を 原寸から切り出して もう一度読む (NAS2611-06 「2026.11.10 8:52」 の時刻を見落とした) ·  7.0.3: 表示どおりの数値 (rr_value_disp) · 写真に時刻があるか (rr_stamp_time) · 2 回目は小数点が見えなければ null · 10 倍違いは null · 合わない写真だけ 3 回目 ·  7.0.1: AI の答えの長さを写真の枚数に合わせる (LTO 25 枚で切れた) · 7.0.2: 2 回目は原寸から切り出して拡大 · IV は全部確認 (完了は PC に記録) · 単価 $2/$10 (토르 Step 3-6 보고)
+ENGINE_VER = "7.0.5"   # 7.0.5: 日付・時刻は 1 枚ずつ 別々の切り出しで 2 回読み 同じ時だけ使う (7.0.4 は 12 枚まとめて読み 全部 08:50 に揃ってしまった · NAS2611-06) ·  7.0.4: 写真の中の日付・時刻を 原寸から切り出して もう一度読む (NAS2611-06 「2026.11.10 8:52」 の時刻を見落とした) ·  7.0.3: 表示どおりの数値 (rr_value_disp) · 写真に時刻があるか (rr_stamp_time) · 2 回目は小数点が見えなければ null · 10 倍違いは null · 合わない写真だけ 3 回目 ·  7.0.1: AI の答えの長さを写真の枚数に合わせる (LTO 25 枚で切れた) · 7.0.2: 2 回目は原寸から切り出して拡大 · IV は全部確認 (完了は PC に記録) · 単価 $2/$10 (토르 Step 3-6 보고)
 HERE = os.path.dirname(os.path.abspath(__file__))
 KINDS = ("bg", "m1", "sf")
 NEED = 4
@@ -209,10 +209,10 @@ The decimal point is often a small dot. If you cannot clearly see where the deci
 Use null if the digits are not clearly readable. Never guess.
 Answer ONLY with JSON: {{"values":[{{"c":1,"value":"00.09"}}]}}"""
 
-PROMPT_STAMP = """Each image is a close crop of the date/time printed on a photo by a camera or phone app, labelled S1..S{n}.
-Read the date AND the time exactly. Formats vary: "2026.11.10 8:52", "11/19/2026", "2026/11/18 16:14", "2026年11月19日 14:27", "11/13/2026 07:49".
-Return "date" as "YYYY-MM-DD" and "time" as "HH:MM" (24h, add a leading zero). Use null for anything not clearly readable. Never guess.
-Answer ONLY with JSON: {{"stamps":[{{"s":1,"date":"2026-11-10","time":"08:52"}}]}}"""
+PROMPT_STAMP = """The image is a close crop of the date/time printed on ONE photo by a camera or phone app.
+Read the date AND the time exactly as printed, digit by digit. Formats vary: "2026.11.10 8:52", "11/19/2026", "2026/11/18 16:14", "2026年11月19日 14:27", "11/13/2026 07:49".
+Return "date" as "YYYY-MM-DD" and "time" as "HH:MM" (24h, add a leading zero). Use null for anything not clearly readable — especially the last digit of the minutes. Never guess.
+Answer ONLY with JSON: {{"date":"2026-11-10","time":"08:52"}}"""
 
 PRICE = {"in": 2.0 / 1e6, "out": 10.0 / 1e6}   # USD / token (Sonnet 5.5 · 토르 확인 2026-11-21 · 費用上限の計算用)
 
@@ -476,21 +476,28 @@ def norm_time(t):
     if not m or int(m[1]) > 23 or int(m[2]) > 59: return ""
     return f"{int(m[1]):02d}:{m[2]}"
 
+def read_one_stamp(ai, crop):
+    """1 枚の日付・時刻を読む → (YYYY-MM-DD or '', HH:MM or '')"""
+    try:
+        s = ai.ask(PROMPT_STAMP, [crop], ["S"], max_tokens=200) or {}
+    except RuntimeError:
+        raise
+    except Exception:
+        return "", ""
+    return (s.get("date") or ""), norm_time(s.get("time"))
+
 def read_stamps(ai, photos, recs, set_name):
-    """写真の中の日付・時刻を 原寸から切り出して もう一度読む (EXIF に時刻がある写真は読まない · AI 1 回)"""
+    """写真の中の日付・時刻を 原寸から切り出して読む (EXIF に時刻がある写真は読まない)
+       7.0.5: 1 枚ずつ · 切り方を変えて 2 回 · 2 回が同じ時だけ時刻を使う (まとめて読むと 全部同じ時刻に揃ってしまう)"""
     targets = [(i, r) for i, r in enumerate(recs) if not (photos[i].get("taken") and len(photos[i]["taken"]) >= 16)]
-    if not targets: return
-    crops = [crop_jpeg(photos[i]["full"], stamp_crop_box(r), margin=0.12, min_w=900) for i, r in targets]
-    ans = ai.ask(PROMPT_STAMP.format(n=len(crops)), crops, [f"S{n}" for n in range(1, len(crops) + 1)],
-                 max_tokens=tokens_for(len(crops), 40, 600))
-    got = {}
-    for s in ans.get("stamps", []):
-        try: got[int(s.get("s"))] = s
-        except Exception: pass
-    for n, (i, r) in enumerate(targets, 1):
-        s = got.get(n) or {}
-        d = check_stamp(s.get("date"), set_name)[:10] if s.get("date") else ""
-        tm = norm_time(s.get("time"))
+    for i, r in targets:
+        box = stamp_crop_box(r)
+        d1, t1 = read_one_stamp(ai, crop_jpeg(photos[i]["full"], box, margin=0.12, min_w=900))
+        d2, t2 = read_one_stamp(ai, crop_jpeg(photos[i]["full"], box, margin=0.35, min_w=1100))
+        dd = d1 if d1 and d1 == d2 else (d1 or d2 if not (d1 and d2) else "")
+        d = check_stamp(dd, set_name)[:10] if dd else ""
+        tm = t1 if t1 and t1 == t2 else ""
+        if t1 and t2 and t1 != t2: r["rr_stamp_note"] = f"time {t1}/{t2}"
         if not d: continue
         # 先に読んだ日付 (EXIF · AI ①) と違う日付なら 使わない (読み違い)
         prev = (r.get("rr_taken") or "")[:10]
