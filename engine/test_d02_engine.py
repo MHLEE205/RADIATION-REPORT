@@ -258,5 +258,41 @@ g8 = FakeGraph(); ai8 = FakeAI()
 E.read_iv(g8, ai8, cfg, "NAS2611-08", False, False, log)
 ok(len(ai8.calls) == 3, f"EXIF に時刻がある写真ばかり → 日付の読み直しなし → {ai8.calls}")
 
+
+print("■ 7.0.6 考える部分 (thinking) で答えが長くなる場合")
+class ThinkAI(StampAI):
+    """本物の Sonnet 5.5 のように 1 枚の日付読みに 600 トークン必要 · 上限が足りなければ 「切れました」"""
+    def ask(self, prompt, images, labels, max_tokens=4000):
+        if prompt.startswith("The image is a close crop of the date/time") and max_tokens < 600:
+            raise RuntimeError(f"AI の答えが途中で切れました (max_tokens {max_tokens}) — このセットは書きません")
+        return StampAI.ask(self, prompt, images, labels, max_tokens)
+g9, ai9 = Graph2(), ThinkAI()
+g9.sets = {"20261119_0859_early": g9.sets["20261119_0859_early"]}
+E.read_iv(g9, ai9, cfg, "IV2", False, False, log)
+ok("RR_READ/IV2.json" in g9.written, "1 枚 600 トークン必要でも セットを書ける (上限 1500)")
+ok(E.STAMP_MAX_TOKENS >= 1000, f"日付・時刻の読みの上限 = {E.STAMP_MAX_TOKENS}")
+class CutStampAI(StampAI):
+    """日付読みだけ 毎回 切れる"""
+    def ask(self, prompt, images, labels, max_tokens=4000):
+        if prompt.startswith("The image is a close crop of the date/time"):
+            raise RuntimeError("AI の答えが途中で切れました (max_tokens 1500) — このセットは書きません")
+        return StampAI.ask(self, prompt, images, labels, max_tokens)
+g10, ai10 = Graph2(), CutStampAI()
+g10.sets = {"20261119_0859_early": g10.sets["20261119_0859_early"]}
+E.read_iv(g10, ai10, cfg, "IV2", False, False, log)
+o10 = g10.written.get("RR_READ/IV2.json")
+ok(o10 is not None and all(p["rr_kind"] for p in o10["sets"][0]["photos"]), "日付読みが全部失敗しても セット (分類・数値) は捨てない")
+ok(all(len(p["rr_taken"] or "") <= 10 for p in o10["sets"][0]["photos"]), "その場合 時刻は付けない (日付だけ)")
+class CapAI(StampAI):
+    def ask(self, prompt, images, labels, max_tokens=4000):
+        if prompt.startswith("The image is a close crop of the date/time"):
+            raise RuntimeError("今日の AI 費用の上限に達しました")
+        return StampAI.ask(self, prompt, images, labels, max_tokens)
+try:
+    E.read_set(Graph2(), CapAI(), cfg, "20261119_0859_early", [{"name": f, "id": "J|20261119_0859_early|" + f, "size": 1, "eTag": "e"} for f in Graph2().sets["20261119_0859_early"]], log)
+    ok(False, "費用上限は止める")
+except RuntimeError as e:
+    ok("上限" in str(e), "費用上限だけは そのまま止める")
+
 print(f"\n結果: {P} OK · {F} NG")
 sys.exit(1 if F else 0)

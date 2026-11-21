@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 ✦ Powered by LEENAI Automation System
-D-02 RR 写真読み取りエンジン v7.0.5  (RPA PC · C:\\LEENAI_D02)
+D-02 RR 写真読み取りエンジン v7.0.6  (RPA PC · C:\\LEENAI_D02)
 
 する事 (1 日 1 回 · 夜 21:00 · 形님 決定 2026-11-21):
   1. SharePoint PHOTO_V2 の 最近更新された IV フォルダの _RR を見る (読むだけ · C-01 エンジンのファイルは変えない)
@@ -25,7 +25,7 @@ D-02 RR 写真読み取りエンジン v7.0.5  (RPA PC · C:\\LEENAI_D02)
 import argparse, base64, datetime as dt, hashlib, io, json, logging, os, re, sys, time
 import urllib.parse
 
-ENGINE_VER = "7.0.5"   # 7.0.5: 日付・時刻は 1 枚ずつ 別々の切り出しで 2 回読み 同じ時だけ使う (7.0.4 は 12 枚まとめて読み 全部 08:50 に揃ってしまった · NAS2611-06) ·  7.0.4: 写真の中の日付・時刻を 原寸から切り出して もう一度読む (NAS2611-06 「2026.11.10 8:52」 の時刻を見落とした) ·  7.0.3: 表示どおりの数値 (rr_value_disp) · 写真に時刻があるか (rr_stamp_time) · 2 回目は小数点が見えなければ null · 10 倍違いは null · 合わない写真だけ 3 回目 ·  7.0.1: AI の答えの長さを写真の枚数に合わせる (LTO 25 枚で切れた) · 7.0.2: 2 回目は原寸から切り出して拡大 · IV は全部確認 (完了は PC に記録) · 単価 $2/$10 (토르 Step 3-6 보고)
+ENGINE_VER = "7.0.6"   # 7.0.6: 日付・時刻の読みの長さ上限 200 → 1500 (Sonnet 5.5 は考える部分が付き 1 枚 329〜609 · 7.0.5 は 7 IV 失敗) · 日付・時刻の読みが失敗しても セットは捨てない (その写真だけ時刻なし) · 数値の読み直しの余裕も増やす ·  7.0.5: 日付・時刻は 1 枚ずつ 別々の切り出しで 2 回読み 同じ時だけ使う (7.0.4 は 12 枚まとめて読み 全部 08:50 に揃ってしまった · NAS2611-06) ·  7.0.4: 写真の中の日付・時刻を 原寸から切り出して もう一度読む (NAS2611-06 「2026.11.10 8:52」 の時刻を見落とした) ·  7.0.3: 表示どおりの数値 (rr_value_disp) · 写真に時刻があるか (rr_stamp_time) · 2 回目は小数点が見えなければ null · 10 倍違いは null · 合わない写真だけ 3 回目 ·  7.0.1: AI の答えの長さを写真の枚数に合わせる (LTO 25 枚で切れた) · 7.0.2: 2 回目は原寸から切り出して拡大 · IV は全部確認 (完了は PC に記録) · 単価 $2/$10 (토르 Step 3-6 보고)
 HERE = os.path.dirname(os.path.abspath(__file__))
 KINDS = ("bg", "m1", "sf")
 NEED = 4
@@ -422,7 +422,7 @@ def read_set(g, ai, cfg, set_name, items, log):
         if targets:
             crops = [crop_jpeg(photos[i]["full"], r["rr_box"]) for i, r in targets]
             ans2 = ai.ask(PROMPT_VALUE.format(n=len(crops)), crops, [f"C{n}" for n in range(1, len(crops) + 1)],
-                          max_tokens=tokens_for(len(crops), 60, 800))
+                          max_tokens=tokens_for(len(crops), 80, 1500))
             vals = {}
             for v in ans2.get("values", []):
                 try: vals[int(v.get("c"))] = v.get("value")
@@ -437,7 +437,7 @@ def read_set(g, ai, cfg, set_name, items, log):
             if retry:
                 crops3 = [crop_jpeg(photos[i]["full"], r["rr_box"], margin=0.45) for i, r in retry]
                 ans3 = ai.ask(PROMPT_VALUE.format(n=len(crops3)), crops3, [f"C{n}" for n in range(1, len(crops3) + 1)],
-                              max_tokens=tokens_for(len(crops3), 60, 800))
+                              max_tokens=tokens_for(len(crops3), 80, 1500))
                 vals3 = {}
                 for v in ans3.get("values", []):
                     try: vals3[int(v.get("c"))] = v.get("value")
@@ -476,12 +476,16 @@ def norm_time(t):
     if not m or int(m[1]) > 23 or int(m[2]) > 59: return ""
     return f"{int(m[1]):02d}:{m[2]}"
 
+STAMP_MAX_TOKENS = 1500   # 7.0.6: 考える部分 (thinking) を含めて足りる長さ
+
 def read_one_stamp(ai, crop):
-    """1 枚の日付・時刻を読む → (YYYY-MM-DD or '', HH:MM or '')"""
+    """1 枚の日付・時刻を読む → (YYYY-MM-DD or '', HH:MM or '')
+       7.0.6: 答えが切れた · 読めない等は その写真だけ「時刻なし」 (セットは捨てない) · 費用上限だけは止める"""
     try:
-        s = ai.ask(PROMPT_STAMP, [crop], ["S"], max_tokens=200) or {}
-    except RuntimeError:
-        raise
+        s = ai.ask(PROMPT_STAMP, [crop], ["S"], max_tokens=STAMP_MAX_TOKENS) or {}
+    except RuntimeError as e:
+        if "上限" in str(e): raise
+        return "", ""
     except Exception:
         return "", ""
     return (s.get("date") or ""), norm_time(s.get("time"))
