@@ -203,6 +203,11 @@ input[type="date"]{color-scheme:dark;}
           <input type="date" id="measDate">
           <div class="src-note" id="measSrc"></div>
         </div>
+        <div class="form-group" id="workGroup" style="display:none;">
+          <label class="form-label" style="color:var(--error);">作業日（確認して入力）</label>
+          <input type="date" id="workDate" onchange="setWorkDate(this.value)">
+          <div class="src-note">作業日が分かりません — 担当者に確認して入力してください</div>
+        </div>
         <div class="form-group" id="vendorGroup" style="display:none;">
           <label class="form-label" style="color:var(--error);">業者に確認した撮影日</label>
           <input type="date" id="vendorDate" onchange="setVendorDate(this.value)">
@@ -326,7 +331,8 @@ input[type="date"]{color-scheme:dark;}
    v7.0.6 (2026-11-22 形님): 報告書の 측정일자 = 日付だけ (時刻は写真の表示にだけ) · 「測定日 < 作業日」 の確認を追加
      作業日 = その IV の 一番遅い作業日 (RR は 1 回の測定で IV を代表 · どれか 1 台の作業より前ならよい)
      = C-01 実況表 (_data/jikkyou.json の slots[].work_date) と コンテナ写真の撮影日 の 遅い方
-     測定日 < 作業日 = OK · 同じ日 = 測定の時刻が その日の最後のコンテナ写真より前なら OK · それ以外 / 遅い = 確定時に 「このまま使いますか？」 */
+     測定日 < 作業日 = OK · 同じ日 = 測定の時刻が その日の最後のコンテナ写真より前なら OK · それ以外 / 遅い = 確定時に 「このまま使いますか？」
+   v7.0.7 (2026-11-22 形님): 作業日が分からない時は 「作業日（確認して入力）」 欄を出す · 担当者が確認して入力するまで 確定できない · 入力値で同じ確認 */
 
 /* ── 設定 (この 1 か所だけ) ── */
 const RR_CFG={
@@ -388,7 +394,7 @@ function startTool(){
 LEENAI.init({
   sys:'D-02',
   name:'放射線測定 報告書',
-  version:'7.0.6',
+  version:'7.0.7',
   date:'2026-11-21',
   desc:'COMPASS と SharePoint (PHOTO_V2) の写真から放射性物質簡易測定結果報告書を作成します',
   redirectUri:'https://mhlee205.github.io/RADIATION-REPORT/',
@@ -658,6 +664,7 @@ let selectedSetId=null;
 let selState=[];
 let rrKinds=null;
 let jkWork=[];       /* C-01 実況表の 作業日 (コンテナ枠ごと) */
+let manualWork='';   /* 作業日不明の時に 担当者が確認して入力した作業日 (v7.0.7) */
 let workTimes={};     /* 同じ IV の作業写真 (コンテナ写真) の撮影時刻 { 'YYYY-MM-DD': ['HH:MM',…] } */
 
 function resetStep3(){
@@ -720,6 +727,7 @@ async function loadRR(ivNo){
     const kids=await grChildrenOfPath(base);
     workTimes=await loadWorkTimes(ivNo).catch(()=>({}));
     jkWork=await loadJikkyouWork(ivNo).catch(()=>[]);
+    manualWork='';
     if(!kids){
       setProgress(0,'写真がありません');
       log(`PHOTO_V2/${ivNo}/_RR がありません — RR写真のメールがまだ届いていないか、エンジンの処理待ちです`,'warn');
@@ -813,7 +821,7 @@ async function loadJikkyouWork(ivNo){
 /* 一番遅い作業日 = 実況表の作業日 と コンテナ写真の撮影日 の 遅い方 · その日の 最後のコンテナ写真の時刻 */
 function latestWork(){
   const ds=[...jkWork,...Object.keys(workTimes)].filter(Boolean).sort();
-  if(!ds.length)return null;
+  if(!ds.length)return manualWork?{date:manualWork,last:'',src:'担当者入力'}:null;
   const d=ds[ds.length-1];
   const ts=(workTimes[d]||[]).slice().sort();
   return {date:d,last:ts.length?ts[ts.length-1]:'',src:Object.keys(workTimes).includes(d)?'写真':'実況表'};
@@ -821,7 +829,7 @@ function latestWork(){
 /* 測定日 < 作業日 の確認 → {state:'ok'|'bad'|'none', text} */
 function workCheck(meas,files){
   const w=latestWork();
-  if(!w)return {state:'none',text:'作業日不明 (前後の確認なし)'};
+  if(!w)return {state:'none',text:'⚠ 作業日不明 — 担当者に確認して 「作業日」 に入力してください'};
   if(meas<w.date)return {state:'ok',text:`作業日 ${w.date} より前 ✓`};
   if(meas>w.date)return {state:'bad',text:`⚠ 測定日 ${meas} が 作業日 ${w.date} より後です`};
   const ts=files.filter(f=>knownDate(f)===meas).map(f=>hhmm(f)).filter(Boolean).sort();
@@ -1045,6 +1053,15 @@ function selectSet(id){
   document.getElementById('photoReview').style.display='block';
 }
 
+/* 作業日不明の時 担当者が入力した作業日 → 確認をやり直す */
+function setWorkDate(v){
+  manualWork=/^\d{4}-\d{2}-\d{2}$/.test(v||'')?v:'';
+  const set=photoSets.find(s=>s.id===selectedSetId);
+  if(set)fillMeasAndDevice(set);
+  S.confirmed=false;setOutputEnabled(false);
+  if(manualWork)log(`作業日 ${manualWork} (担当者入力) で 測定日との前後を確認します`,'info');
+}
+
 /* 時刻が読めない写真の 時刻 (目安) — ① 同じ組 · 撮った順 (ファイル番号) で一番近い (同じ距離なら前) ② 同じ日の作業写真 ③ 「撮影時刻（目安）」 */
 function hasTime(f){return normTaken(f.taken||'').length>=16;}
 function fillEstTimes(set){
@@ -1105,6 +1122,9 @@ function fillMeasAndDevice(set){
     md.value=dates[0];
     const multi=dates.length>1,warn=st.includes('recv_warn')||st.includes('warn');
     const wk=workCheck(dates[0],chosen.map(s=>s.file));
+    const wg=document.getElementById('workGroup');
+    const needWork=!([...jkWork,...Object.keys(workTimes)].length);
+    if(wg){wg.style.display=needWork?'block':'none';document.getElementById('workDate').value=manualWork||'';}
     ms.textContent=dsrc+(multi?`（${dates.join(' · ')} · 日付が複数 · 要確認）`:'')+(warn?` · ⚠ CY CUT ${RR_CFG.cutDays}〜1日前 (確定時に確認)`:'')+' · '+wk.text;
     ms.style.color=(multi||warn||dsrc!=='写真の撮影日'||wk.state==='bad')?'var(--warn)':'var(--text2)';
   }else{
@@ -1411,6 +1431,7 @@ async function confirmSelection(){
   if(nWarn&&!confirm(`CY CUT ${RR_CFG.cutDays}日前を過ぎた写真が ${nWarn}枚 あります（CY CUT ${S.selectedIV.cyCut} · 撮影日または受信日 ${[...new Set(items.filter(it=>isWarn(it.file)).map(it=>measDateOf(it.file)))].join(' · ')}）。このまま使いますか？`))return;
   if(last&&meas>last&&!nWarn&&!confirm(`測定日 ${meas} が CY CUT ${RR_CFG.cutDays}日前 (${last}) より後です。このまま進めますか？`))return;
   const wk=workCheck(meas,items.map(it=>it.file));
+  if(wk.state==='none'){alert('作業日が分かりません。担当者に確認して 「作業日（確認して入力）」 に入力してください。');document.getElementById('workDate')?.focus();return;}
   if(wk.state==='bad'&&!confirm(`${wk.text}。このまま使いますか？`))return;
   const noTime=items.filter(it=>!/ \d{2}:\d{2}$/.test(photoLabel(it.file))).length;   /* v7.0.5: 近い写真の時刻でも埋まらない写真だけ */
   if(noTime&&!confirm(`撮影時刻が分からない写真が ${noTime}枚 あります（その写真は日付だけ · または表示なし）。このまま作りますか？`))return;
@@ -1440,7 +1461,7 @@ async function writeConfirmLog(){
     action_id:id, type:'rr_confirm', at:now.toISOString(), by:(LEENAI.user&&LEENAI.user.email)||'',
     tool:'D-02 v7.0.1', iv_no:S.selectedIV?.ivNo||'', set:set.label||'', cy_cut:S.selectedIV?.cyCut||'',
     meas_date:S.meas, device:currentTool(),
-    vendor_date:set.vendorDate||'',
+    vendor_date:set.vendorDate||'',work_date:(latestWork()||{}).date||'',work_date_src:(latestWork()||{}).src||'',
     photos:selState.map(s=>({file:s.file.name,sha16:s.file.sha16||'',taken:s.file.taken||'',taken_src:s.file.takenSrc||'',received:s.file.recv||'',date_state:dateState(s.file),kind:s.category,disp:s.category?(s.disp||null):null,est_time:s.file.estTime||'',est_src:s.file.estSrc||'',
       point:s.category?catItems(s.category).indexOf(s)+1:null,value:s.category?s.value:null,manual:!!s.manual,
       engine:{kind:s.file.eng.kind,point:s.file.eng.point,value:s.file.eng.value,value2:s.file.eng.value2}}))
