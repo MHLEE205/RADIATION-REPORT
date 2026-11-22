@@ -201,7 +201,6 @@ input[type="date"]{color-scheme:dark;}
         <div class="form-group">
           <label class="form-label">測定日（写真の撮影日 · そのまま）</label>
           <input type="date" id="measDate">
-          <input type="text" id="measTime" placeholder="14:27~14:28" style="width:110px;margin-left:4px;" title="時:分 (最初〜最後の写真の撮影時刻)">
           <div class="src-note" id="measSrc"></div>
         </div>
         <div class="form-group" id="vendorGroup" style="display:none;">
@@ -323,13 +322,18 @@ input[type="date"]{color-scheme:dark;}
    v7.0.5 (2026-11-21 形님): 時刻が読めない写真の時刻 (目安 · 数分の差は問題にしない) =
      ① 同じ組で 撮った順 (カメラのファイル番号) が一番近い写真の時刻 ② 同じ日の作業写真 (コンテナ写真) の一番早い時刻
      ③ 「撮影時刻（目安）」 (初期値 08:30 · 担当者が確認 / 修正 · 形님: 作業は たいてい 8〜9 時)
-     日付は写真から読んだ本当の日付のまま · 無作為の時刻は作らない */
+     日付は写真から読んだ本当の日付のまま · 無作為の時刻は作らない
+   v7.0.6 (2026-11-22 形님): 報告書の 측정일자 = 日付だけ (時刻は写真の表示にだけ) · 「測定日 < 作業日」 の確認を追加
+     作業日 = その IV の 一番遅い作業日 (RR は 1 回の測定で IV を代表 · どれか 1 台の作業より前ならよい)
+     = C-01 実況表 (_data/jikkyou.json の slots[].work_date) と コンテナ写真の撮影日 の 遅い方
+     測定日 < 作業日 = OK · 同じ日 = 測定の時刻が その日の最後のコンテナ写真より前なら OK · それ以外 / 遅い = 確定時に 「このまま使いますか？」 */
 
 /* ── 設定 (この 1 か所だけ) ── */
 const RR_CFG={
   need:4,                 /* 各区分の枚数 (背景10m · 1m · 表面) */
   cutDays:2,              /* 使える写真 = 撮影日が CY CUT の この日数 前まで */
   estTimeDefault:'08:30', /* 時刻の目安 (③) の初期値 */
+  jikkyouRel:'_data/jikkyou.json',   /* C-01 実況表のデータ (PHOTO_V2 の中 · 作業日) */
   maxVal:0.3,             /* 写真 1 枚の測定値の上限 (μSv/h) */
   maxRatio:1.5,           /* 判定: 表面平均 / 背景平均 (b/a) の上限 */
   /* 担当者が確定した内容を RR_READ/_confirm/{日付}/ に記録 (D-02 エンジンの精度測定用 · D-02 専用フォルダ) */
@@ -384,7 +388,7 @@ function startTool(){
 LEENAI.init({
   sys:'D-02',
   name:'放射線測定 報告書',
-  version:'7.0.5',
+  version:'7.0.6',
   date:'2026-11-21',
   desc:'COMPASS と SharePoint (PHOTO_V2) の写真から放射性物質簡易測定結果報告書を作成します',
   redirectUri:'https://mhlee205.github.io/RADIATION-REPORT/',
@@ -653,6 +657,7 @@ let photoSets=[];
 let selectedSetId=null;
 let selState=[];
 let rrKinds=null;
+let jkWork=[];       /* C-01 実況表の 作業日 (コンテナ枠ごと) */
 let workTimes={};     /* 同じ IV の作業写真 (コンテナ写真) の撮影時刻 { 'YYYY-MM-DD': ['HH:MM',…] } */
 
 function resetStep3(){
@@ -714,6 +719,7 @@ async function loadRR(ivNo){
     const rrRead=await grRead(ivNo).catch(e=>{log('エンジンの読み取り結果を読めません: '+e.message,'warn');return null;});
     const kids=await grChildrenOfPath(base);
     workTimes=await loadWorkTimes(ivNo).catch(()=>({}));
+    jkWork=await loadJikkyouWork(ivNo).catch(()=>[]);
     if(!kids){
       setProgress(0,'写真がありません');
       log(`PHOTO_V2/${ivNo}/_RR がありません — RR写真のメールがまだ届いていないか、エンジンの処理待ちです`,'warn');
@@ -795,6 +801,33 @@ async function loadWorkTimes(ivNo){
   }
   Object.keys(out).forEach(d=>out[d].sort());
   return out;
+}
+
+/* C-01 実況表 (PHOTO_V2/_data/jikkyou.json) の この IV の 作業日 — CY CUT が今日以降の IV だけ載っている (無ければ []) */
+let jkCache=null;
+async function loadJikkyouWork(ivNo){
+  if(!jkCache)jkCache=await grJson(RR_CFG.jikkyouRel).catch(()=>null)||{ivs:[]};
+  const iv=(jkCache.ivs||[]).find(x=>x.iv_no===ivNo);
+  return iv?(iv.slots||[]).map(s=>s.work_date).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d||'')):[];
+}
+/* 一番遅い作業日 = 実況表の作業日 と コンテナ写真の撮影日 の 遅い方 · その日の 最後のコンテナ写真の時刻 */
+function latestWork(){
+  const ds=[...jkWork,...Object.keys(workTimes)].filter(Boolean).sort();
+  if(!ds.length)return null;
+  const d=ds[ds.length-1];
+  const ts=(workTimes[d]||[]).slice().sort();
+  return {date:d,last:ts.length?ts[ts.length-1]:'',src:Object.keys(workTimes).includes(d)?'写真':'実況表'};
+}
+/* 測定日 < 作業日 の確認 → {state:'ok'|'bad'|'none', text} */
+function workCheck(meas,files){
+  const w=latestWork();
+  if(!w)return {state:'none',text:'作業日不明 (前後の確認なし)'};
+  if(meas<w.date)return {state:'ok',text:`作業日 ${w.date} より前 ✓`};
+  if(meas>w.date)return {state:'bad',text:`⚠ 測定日 ${meas} が 作業日 ${w.date} より後です`};
+  const ts=files.filter(f=>knownDate(f)===meas).map(f=>hhmm(f)).filter(Boolean).sort();
+  if(!w.last||!ts.length)return {state:'ok',text:`作業日 ${w.date} と同じ日 (時刻での確認なし)`};
+  return ts[0]<w.last?{state:'ok',text:`作業日 ${w.date} と同じ日 · 測定 ${ts[0]} が 最後の作業写真 ${w.last} より前 ✓`}
+                     :{state:'bad',text:`⚠ 測定 ${meas} ${ts[0]} が 作業日 ${w.date} の最後の作業写真 ${w.last} より後です`};
 }
 
 async function runPool(items,size,fn){
@@ -1068,16 +1101,14 @@ function fillMeasAndDevice(set){
   const dates=[...new Set(chosen.map(s=>measDateOf(s.file)).filter(Boolean))].sort();
   const st=chosen.map(s=>dateState(s.file));
   const dsrc=chosen.some(s=>s.file.taken)?'写真の撮影日':chosen.some(s=>s.file.vendor)?'業者確認の撮影日':'撮影日不明 · メール受信日';
-  const mt=document.getElementById('measTime');
-  const times=chosen.filter(s=>measDateOf(s.file)===dates[0]&&hhmm(s.file)).map(s=>hhmm(s.file)).sort();
-  mt.value=times.length?(times[0]===times[times.length-1]?times[0]:`${times[0]}~${times[times.length-1]}`):'';
   if(dates.length){
     md.value=dates[0];
     const multi=dates.length>1,warn=st.includes('recv_warn')||st.includes('warn');
-    ms.textContent=dsrc+(multi?`（${dates.join(' · ')} · 日付が複数 · 要確認）`:'')+(warn?` · ⚠ CY CUT ${RR_CFG.cutDays}〜1日前 (確定時に確認)`:'');
-    ms.style.color=(multi||warn||dsrc!=='写真の撮影日')?'var(--warn)':'var(--text2)';
+    const wk=workCheck(dates[0],chosen.map(s=>s.file));
+    ms.textContent=dsrc+(multi?`（${dates.join(' · ')} · 日付が複数 · 要確認）`:'')+(warn?` · ⚠ CY CUT ${RR_CFG.cutDays}〜1日前 (確定時に確認)`:'')+' · '+wk.text;
+    ms.style.color=(multi||warn||dsrc!=='写真の撮影日'||wk.state==='bad')?'var(--warn)':'var(--text2)';
   }else{
-    md.value='';mt.value='';
+    md.value='';
     ms.textContent='撮影日が分かりません — 業者に確認して入力してください';
     ms.style.color='var(--warn)';
   }
@@ -1379,11 +1410,11 @@ async function confirmSelection(){
   const nWarn=items.filter(it=>isWarn(it.file)).length;
   if(nWarn&&!confirm(`CY CUT ${RR_CFG.cutDays}日前を過ぎた写真が ${nWarn}枚 あります（CY CUT ${S.selectedIV.cyCut} · 撮影日または受信日 ${[...new Set(items.filter(it=>isWarn(it.file)).map(it=>measDateOf(it.file)))].join(' · ')}）。このまま使いますか？`))return;
   if(last&&meas>last&&!nWarn&&!confirm(`測定日 ${meas} が CY CUT ${RR_CFG.cutDays}日前 (${last}) より後です。このまま進めますか？`))return;
-  const mtime=(document.getElementById('measTime').value||'').trim();
-  if(mtime&&!/^\d{1,2}:\d{2}(~\d{1,2}:\d{2})?$/.test(mtime)){alert('時:分 の形が正しくありません（例 14:27 または 14:27~14:28）。');document.getElementById('measTime').focus();return;}
+  const wk=workCheck(meas,items.map(it=>it.file));
+  if(wk.state==='bad'&&!confirm(`${wk.text}。このまま使いますか？`))return;
   const noTime=items.filter(it=>!/ \d{2}:\d{2}$/.test(photoLabel(it.file))).length;   /* v7.0.5: 近い写真の時刻でも埋まらない写真だけ */
   if(noTime&&!confirm(`撮影時刻が分からない写真が ${noTime}枚 あります（その写真は日付だけ · または表示なし）。このまま作りますか？`))return;
-  S.meas=meas+(mtime?' '+mtime:'');
+  S.meas=meas;   /* v7.0.6: 측정일자 = 日付だけ */
   showLoading('写真を準備中...');
   try{
     await preparePhotos();
