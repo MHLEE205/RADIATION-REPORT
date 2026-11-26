@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 ✦ Powered by LEENAI Automation System
-D-02 RR 写真読み取りエンジン v7.0.6  (RPA PC · C:\\LEENAI_D02)
+D-02 RR 写真読み取りエンジン v7.0.7  (RPA PC · C:\\LEENAI_D02)
 
 する事 (1 日 1 回 · 夜 21:00 · 形님 決定 2026-11-21):
   1. SharePoint PHOTO_V2 の 最近更新された IV フォルダの _RR を見る (読むだけ · C-01 エンジンのファイルは変えない)
@@ -25,7 +25,7 @@ D-02 RR 写真読み取りエンジン v7.0.6  (RPA PC · C:\\LEENAI_D02)
 import argparse, base64, datetime as dt, hashlib, io, json, logging, os, re, sys, time
 import urllib.parse
 
-ENGINE_VER = "7.0.6"   # 7.0.6: 日付・時刻の読みの長さ上限 200 → 1500 (Sonnet 5.5 は考える部分が付き 1 枚 329〜609 · 7.0.5 は 7 IV 失敗) · 日付・時刻の読みが失敗しても セットは捨てない (その写真だけ時刻なし) · 数値の読み直しの余裕も増やす ·  7.0.5: 日付・時刻は 1 枚ずつ 別々の切り出しで 2 回読み 同じ時だけ使う (7.0.4 は 12 枚まとめて読み 全部 08:50 に揃ってしまった · NAS2611-06) ·  7.0.4: 写真の中の日付・時刻を 原寸から切り出して もう一度読む (NAS2611-06 「2026.11.10 8:52」 の時刻を見落とした) ·  7.0.3: 表示どおりの数値 (rr_value_disp) · 写真に時刻があるか (rr_stamp_time) · 2 回目は小数点が見えなければ null · 10 倍違いは null · 合わない写真だけ 3 回目 ·  7.0.1: AI の答えの長さを写真の枚数に合わせる (LTO 25 枚で切れた) · 7.0.2: 2 回目は原寸から切り出して拡大 · IV は全部確認 (完了は PC に記録) · 単価 $2/$10 (토르 Step 3-6 보고)
+ENGINE_VER = "7.0.7"   # 7.0.7: CUT 後は IV フォルダが 「▲ 書類作成中」 へ移る → _RR を 2 か所とも見る (形님 2026-11-26) ·  7.0.6: 日付・時刻の読みの長さ上限 200 → 1500 (Sonnet 5.5 は考える部分が付き 1 枚 329〜609 · 7.0.5 は 7 IV 失敗) · 日付・時刻の読みが失敗しても セットは捨てない (その写真だけ時刻なし) · 数値の読み直しの余裕も増やす ·  7.0.5: 日付・時刻は 1 枚ずつ 別々の切り出しで 2 回読み 同じ時だけ使う (7.0.4 は 12 枚まとめて読み 全部 08:50 に揃ってしまった · NAS2611-06) ·  7.0.4: 写真の中の日付・時刻を 原寸から切り出して もう一度読む (NAS2611-06 「2026.11.10 8:52」 の時刻を見落とした) ·  7.0.3: 表示どおりの数値 (rr_value_disp) · 写真に時刻があるか (rr_stamp_time) · 2 回目は小数点が見えなければ null · 10 倍違いは null · 合わない写真だけ 3 回目 ·  7.0.1: AI の答えの長さを写真の枚数に合わせる (LTO 25 枚で切れた) · 7.0.2: 2 回目は原寸から切り出して拡大 · IV は全部確認 (完了は PC に記録) · 単価 $2/$10 (토르 Step 3-6 보고)
 HERE = os.path.dirname(os.path.abspath(__file__))
 KINDS = ("bg", "m1", "sf")
 NEED = 4
@@ -43,6 +43,9 @@ def load_config(path=None):
     c.setdefault("daily_cost_cap_usd", 5.0) # 1 日の AI 費用の上限 (超えたら その日は止める)
     c.setdefault("img_long_edge", 1024)     # AI に送る写真の長い辺 (px)
     c.setdefault("data_dir", os.path.join(HERE, "data"))
+    # CUT 後の置き場 (無ければ photo_root の 2 つ上 + 「▲ 書類作成中」) — 後で LEENAI_COMMON へ (エージェントマスター)
+    if not c.get("doc_root") and c.get("photo_root"):
+        c["doc_root"] = "/".join(c["photo_root"].split("/")[:-2] + ["▲ 書類作成中"])
     for k in ("tenant_id", "client_id", "drive_id", "photo_root", "read_root"):
         if not c.get(k):
             raise SystemExit(f"config.json に {k} がありません")
@@ -519,10 +522,20 @@ def fingerprint(items):
 
 IMG_RE = re.compile(r"\.(jpe?g|png)$", re.I)
 
+def iv_rr_folders(g, cfg, iv):
+    """IV の _RR のセットフォルダ — CUT 前 photo_root · CUT 後 doc_root の 2 か所 (同じ名前は先の方)"""
+    out, names = [], set()
+    for root in [cfg["photo_root"], cfg.get("doc_root")]:
+        if not root: continue
+        kids = g.children(f"{root}/{iv}/_RR")
+        for k in kids or []:
+            if "folder" in k and k["name"] not in names:
+                names.add(k["name"]); out.append(k)
+    return out
+
 def read_iv(g, ai, cfg, iv, force, dry, log):
-    base = f"{cfg['photo_root']}/{iv}/_RR"
-    kids = g.children(base)
-    if kids is None: return False
+    kids = iv_rr_folders(g, cfg, iv)
+    if not kids: return False
     out_rel = f"{cfg['read_root']}/{iv}.json"
     cur = (None if force else g.get_json(out_rel)) or {"iv_no": iv, "sets": []}
     if cur.get("status") == "done":
@@ -575,7 +588,9 @@ def save_done(cfg, done):
 def recent_ivs(g, cfg):
     since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=cfg["since_days"])
     out = []
-    for k in g.children(cfg["photo_root"]) or []:
+    listing = list(g.children(cfg["photo_root"]) or [])
+    if cfg.get("doc_root"): listing += list(g.children(cfg["doc_root"]) or [])
+    for k in listing:
         if "folder" not in k or k["name"].startswith("_"): continue
         if not cfg["since_days"]:
             out.append(k["name"]); continue
@@ -583,7 +598,7 @@ def recent_ivs(g, cfg):
         try: ok = dt.datetime.fromisoformat(t.replace("Z", "+00:00")) >= since
         except Exception: ok = True
         if ok: out.append(k["name"])
-    return sorted(out)
+    return sorted(set(out))
 
 def setup_log(cfg):
     d = os.path.join(cfg["data_dir"], "logs"); os.makedirs(d, exist_ok=True)

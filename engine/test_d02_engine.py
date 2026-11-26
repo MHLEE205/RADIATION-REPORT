@@ -294,5 +294,25 @@ try:
 except RuntimeError as e:
     ok("上限" in str(e), "費用上限だけは そのまま止める")
 
+
+print("■ 7.0.7 CUT 後 (▲ 書類作成中) にも _RR")
+class GraphMoved(Graph2):
+    """IV2 は ▲ 書類作成中 へ移動済み · PHOTO_V2 には無い"""
+    def children(self, rel=None, item_id=None):
+        if rel and rel.startswith("PV2/IV2"): return None
+        if rel and rel.endswith("DOC/IV2/_RR"):
+            return [{"name": n, "id": "S|" + n, "folder": {"childCount": 12}} for n in self.sets]
+        if rel == "PV2": return [{"name": "NAS2611-08", "folder": {}}, {"name": "_data", "folder": {}}]
+        if rel == "DOC": return [{"name": "IV2", "folder": {}}, {"name": "NAS2611-08", "folder": {}}, {"name": "_LEENAI", "folder": {}}]
+        return Graph2.children(self, rel, item_id)
+cfg2 = dict(cfg, doc_root="DOC", since_days=0)
+gm, aim = GraphMoved(), GoodAI()
+gm.sets = {"20261119_0859_early": gm.sets["20261119_0859_early"]}
+ok(E.read_iv(gm, aim, cfg2, "IV2", False, False, log) and "RR_READ/IV2.json" in gm.written, "PHOTO_V2 に無い IV → ▲ 書類作成中 の _RR を読む")
+ok(E.recent_ivs(gm, cfg2) == ["IV2", "NAS2611-08"], f"IV 一覧 = 2 か所の和 (重複 · _ で始まるものは除く) → {E.recent_ivs(gm, cfg2)}")
+import tempfile as _tf, json as _js
+p = _tf.mktemp(suffix=".json"); _js.dump({"tenant_id":"t","client_id":"c","drive_id":"d","photo_root":"古紙/-. 古紙書類/▲ LEENAI 通関作業中/PHOTO_V2","read_root":"r"}, open(p,"w",encoding="utf-8"))
+ok(E.load_config(p)["doc_root"] == "古紙/-. 古紙書類/▲ 書類作成中", "doc_root を書かなければ photo_root から求める (古紙書類/▲ 書類作成中)")
+
 print(f"\n結果: {P} OK · {F} NG")
 sys.exit(1 if F else 0)

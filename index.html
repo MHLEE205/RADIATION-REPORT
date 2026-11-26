@@ -332,7 +332,9 @@ input[type="date"]{color-scheme:dark;}
      作業日 = その IV の 一番遅い作業日 (RR は 1 回の測定で IV を代表 · どれか 1 台の作業より前ならよい)
      = C-01 実況表 (_data/jikkyou.json の slots[].work_date) と コンテナ写真の撮影日 の 遅い方
      測定日 < 作業日 = OK · 同じ日 = 測定の時刻が その日の最後のコンテナ写真より前なら OK · それ以外 / 遅い = 確定時に 「このまま使いますか？」
-   v7.0.7 (2026-11-22 形님): 作業日が分からない時は 「作業日（確認して入力）」 欄を出す · 担当者が確認して入力するまで 確定できない · 入力値で同じ確認 */
+   v7.0.7 (2026-11-22 形님): 作業日が分からない時は 「作業日（確認して入力）」 欄を出す · 担当者が確認して入力するまで 確定できない · 入力値で同じ確認
+   v7.0.8 (2026-11-26 形님): CUT 後は IV フォルダが 「▲ 書類作成中」 へ移動する → RR 写真 (_RR) と 作業写真 を 2 か所とも探す
+     CUT 前 = PHOTO_V2/{IV}/_RR · {IV}/{CT}/   CUT 後 = ▲ 書類作成中/{IV}/_RR · {IV}/PHOTO/{CT}/ · 両方にあれば 合わせて表示 */
 
 /* ── 設定 (この 1 か所だけ) ── */
 const RR_CFG={
@@ -340,6 +342,8 @@ const RR_CFG={
   cutDays:2,              /* 使える写真 = 撮影日が CY CUT の この日数 前まで */
   estTimeDefault:'08:30', /* 時刻の目安 (③) の初期値 */
   jikkyouRel:'_data/jikkyou.json',   /* C-01 実況表のデータ (PHOTO_V2 の中 · 作業日) */
+  docFolder:'▲ 書類作成中',          /* CUT 後の IV フォルダの置き場 (古紙書類 の下) — 後で LEENAI_COMMON SP.PATH へ (エージェントマスター) */
+  docPhotoSub:'PHOTO',                /* CUT 後の 作業写真 (コンテナ写真) = {IV}/PHOTO/{CT}/ */
   maxVal:0.3,             /* 写真 1 枚の測定値の上限 (μSv/h) */
   maxRatio:1.5,           /* 判定: 表面平均 / 背景平均 (b/a) の上限 */
   /* 担当者が確定した内容を RR_READ/_confirm/{日付}/ に記録 (D-02 エンジンの精度測定用 · D-02 専用フォルダ) */
@@ -394,7 +398,7 @@ function startTool(){
 LEENAI.init({
   sys:'D-02',
   name:'放射線測定 報告書',
-  version:'7.0.7',
+  version:'7.0.8',
   date:'2026-11-21',
   desc:'COMPASS と SharePoint (PHOTO_V2) の写真から放射性物質簡易測定結果報告書を作成します',
   redirectUri:'https://mhlee205.github.io/RADIATION-REPORT/',
@@ -440,6 +444,13 @@ async function grJsonFull(path){
 }
 /* PHOTO_V2 の中の JSON */
 function grJson(rel){return grJsonFull(photoRoot()+'/'+rel);}
+/* CUT 後の置き場 = PHOTO_V2 の 2 つ上 (古紙書類) の下の RR_CFG.docFolder */
+function docRoot(){const p=photoRoot();return p?p.split('/').slice(0,-2).concat([RR_CFG.docFolder]).join('/'):'';}
+/* IV の置き場 2 か所 (CUT 前 · CUT 後) */
+function ivPlaces(ivNo){
+  return [{label:'PHOTO_V2',path:photoRoot()+'/'+ivNo,ctSub:''},{label:RR_CFG.docFolder,path:docRoot()+'/'+ivNo,ctSub:RR_CFG.docPhotoSub}].filter(p=>!p.path.startsWith('/'));
+}
+function grChildrenOfFull(path){return grChildren(grFullUrl(path)+'/children?$expand=thumbnails&$top=200');}
 /* D-02 エンジンの読み取り結果 RR_READ/{IV}.json (無ければ null) */
 function grRead(ivNo){return grJsonFull(readRoot()+'/'+ivNo+'.json');}
 async function grChildren(url){
@@ -587,9 +598,12 @@ async function loadRRStatus(ivNo,el){
       el.title=`${rd.sets.length}セット · ${cnt}枚 · 読み取り ${rd.updated_at||''}`;
       return;
     }
-    const k=await grJson(`${ivNo}/_RR/_kinds.json`);
-    if(!k){el.textContent='なし';el.className='rr-chip none';return;}
-    const cnt=(k.sets||[]).reduce((n,s)=>n+((s.photos||[]).length),0);
+    let cnt=0,found=false;
+    for(const pl of ivPlaces(ivNo)){
+      const k=await grJsonFull(pl.path+'/_RR/_kinds.json').catch(()=>null);
+      if(k){found=true;cnt+=(k.sets||[]).reduce((n,s)=>n+((s.photos||[]).length),0);}
+    }
+    if(!found){el.textContent='なし';el.className='rr-chip none';return;}
     el.textContent=`${cnt}枚 · 読取待ち`;el.className='rr-chip wait';
   }catch(e){el.textContent='?';el.title=e.message;}
 }
@@ -719,18 +733,25 @@ function measDateOf(f){const s=dateState(f);return knownDate(f)||((s==='recv_ok'
 
 async function loadRR(ivNo){
   if(commonMissing().length){log('共通ファイルが古いため写真を読めません','err');return;}
-  const base=`${ivNo}/_RR`;
   try{
-    setProgress(5,`SharePoint PHOTO_V2/${ivNo}/_RR を確認中...`);
-    rrKinds=await grJson(`${base}/_kinds.json`);
+    setProgress(5,`SharePoint ${ivNo}/_RR を確認中 (PHOTO_V2 · ${RR_CFG.docFolder})...`);
+    // v7.0.8: 2 か所 (CUT 前 PHOTO_V2 · CUT 後 ▲ 書類作成中) の _RR を合わせる
+    const kindsAll={sets:[]};let kids=null;const where=[];
+    for(const pl of ivPlaces(ivNo)){
+      const k=await grJsonFull(pl.path+'/_RR/_kinds.json').catch(()=>null);
+      const c=await grChildrenOfFull(pl.path+'/_RR').catch(()=>null);
+      if(k)(k.sets||[]).forEach(s=>kindsAll.sets.push(s));
+      if(c){kids=(kids||[]).concat(c.filter(x=>!(kids||[]).some(y=>y.name===x.name&&x.folder)));where.push(pl.label);}
+    }
+    rrKinds=kindsAll.sets.length?kindsAll:null;
+    if(where.length)log(`RR 写真の場所: ${where.join(' · ')}`,'info');
     const rrRead=await grRead(ivNo).catch(e=>{log('エンジンの読み取り結果を読めません: '+e.message,'warn');return null;});
-    const kids=await grChildrenOfPath(base);
     workTimes=await loadWorkTimes(ivNo).catch(()=>({}));
     jkWork=await loadJikkyouWork(ivNo).catch(()=>[]);
     manualWork='';
     if(!kids){
       setProgress(0,'写真がありません');
-      log(`PHOTO_V2/${ivNo}/_RR がありません — RR写真のメールがまだ届いていないか、エンジンの処理待ちです`,'warn');
+      log(`${ivNo}/_RR が PHOTO_V2 にも ${RR_CFG.docFolder} にもありません — RR写真のメールがまだ届いていないか、エンジンの処理待ちです`,'warn');
       return;
     }
     const folders=kids.filter(x=>x.folder);
@@ -793,12 +814,15 @@ async function loadRR(ivNo){
   }catch(e){setProgress(0,'読み込み失敗');log('写真の読み込みに失敗: '+e.message,'err');console.error(e);}
 }
 
-/* 同じ IV の作業写真 (PHOTO_V2/{IV}/{CT}/) の撮影時刻 — SharePoint の写真情報 (EXIF) か ファイル名 YYYYMMDD_HHMMSS · 本体は読まない */
+/* 同じ IV の作業写真の撮影時刻 — CUT 前 PHOTO_V2/{IV}/{CT}/ · CUT 後 ▲ 書類作成中/{IV}/PHOTO/{CT}/
+   SharePoint の写真情報 (EXIF) か ファイル名 YYYYMMDD_HHMMSS · 本体は読まない */
 async function loadWorkTimes(ivNo){
   const out={};
-  const top=await grChildrenOfPath(ivNo);
-  if(!top)return out;
-  const cts=top.filter(x=>x.folder&&!/^_/.test(x.name)&&x.name!=='搬入票');
+  let cts=[];
+  for(const pl of ivPlaces(ivNo)){
+    const top=await grChildrenOfFull(pl.ctSub?pl.path+'/'+pl.ctSub:pl.path).catch(()=>null);
+    if(top)cts=cts.concat(top.filter(x=>x.folder&&!/^_/.test(x.name)&&!['搬入票','RR','PHOTO','通関'].includes(x.name)));
+  }
   for(const c of cts){
     const items=(await grChildrenOfItem(c.id))||[];
     items.forEach(it=>{
