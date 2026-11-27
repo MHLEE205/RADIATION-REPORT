@@ -382,7 +382,8 @@ input[type="date"]{color-scheme:dark;}
    v7.1.0 (2026-11-27 形님): 別機能 「📷 コンテナ写真 日時入れ」 (画面の一番下) — STEP 1 の I/V のコンテナ写真に 日付 · 時刻 を右下に入れる ·
      日付 = 写真 → 実況表 → 担当者入力 · 時刻 = 写真 → 同じ CT の近い写真 → 12〜13 時の目安 (IV · CT で決まる値) · 元の写真は読むだけ ·
      保存 = ▲ 書類作成中/{IV}/_日時入り/{CT}/ (▲ の IV フォルダがある時だけ) + zip · RR 報告書の機能は変えない
-   v7.1.1 (2026-11-27 形님): コンテナ写真 日時入れ の時刻 = 写真に本当の時刻があっても すべて 12〜13 時 (RR_CFG.stampWin) の目安 · 日付の決め方は同じ · RR 報告書は変えない */
+   v7.1.1 (2026-11-27 形님): コンテナ写真 日時入れ の時刻 = 写真に本当の時刻があっても すべて 12〜13 時 (RR_CFG.stampWin) の目安 · 日付の決め方は同じ · RR 報告書は変えない
+   v7.1.2 (2026-11-27 形님): 一覧の RR写真 = _kinds.json が 2 か所とも無い時も _RR の写真を数える (「N枚 · 未分類」 · 写真が無い時だけ 「なし」) */
 
 /* ── 設定 (この 1 か所だけ) ── */
 const RR_CFG={
@@ -447,7 +448,7 @@ function startTool(){
 LEENAI.init({
   sys:'D-02',
   name:'放射線測定 報告書',
-  version:'7.1.1',
+  version:'7.1.2',
   date:'2026-11-27',
   desc:'COMPASS と SharePoint (PHOTO_V2) の写真から放射性物質簡易測定結果報告書を作成します',
   redirectUri:'https://mhlee205.github.io/RADIATION-REPORT/',
@@ -652,7 +653,22 @@ async function loadRRStatus(ivNo,el){
       const k=await grJsonFull(pl.path+'/_RR/_kinds.json').catch(()=>null);
       if(k){found=true;cnt+=(k.sets||[]).reduce((n,s)=>n+((s.photos||[]).length),0);}
     }
-    if(!found){el.textContent='なし';el.className='rr-chip none';return;}
+    if(!found){
+      /* v7.1.2: _kinds.json が 2 か所とも無い → _RR の中の写真を数える (直下の写真 + セットフォルダの中 · loadRR と同じ規則)
+         2 か所に同じものがある時 (C-01 が ▲ へ複製) = 同じ名前のセット · 同じ名前の直下写真は 1 つ */
+      let n=0;const seen=[],loose=[];
+      for(const pl of ivPlaces(ivNo)){
+        const c=await grChildrenOfFull(pl.path+'/_RR').catch(()=>null);
+        if(!c)continue;
+        c.filter(x=>x.file&&isImg(x.name)&&!loose.includes(x.name)).forEach(x=>{loose.push(x.name);n++;});
+        for(const f of c.filter(x=>x.folder&&!seen.includes(x.name))){
+          seen.push(f.name);
+          n+=((await grChildrenOfItem(f.id))||[]).filter(x=>x.file&&isImg(x.name)).length;
+        }
+      }
+      if(n){el.textContent=`${n}枚 · 未分類`;el.className='rr-chip wait';el.title=`_RR の写真 ${n}枚 (分類 _kinds.json なし)`;return;}
+      el.textContent='なし';el.className='rr-chip none';return;
+    }
     el.textContent=`${cnt}枚 · 読取待ち`;el.className='rr-chip wait';
   }catch(e){el.textContent='?';el.title=e.message;}
 }
