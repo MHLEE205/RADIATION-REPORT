@@ -124,6 +124,27 @@ input[type="date"]{color-scheme:dark;}
 .vf-st{font-size:10px;font-weight:700;}
 .vf-st.ok{color:var(--ok);}.vf-st.bad{color:var(--error);}.vf-st.todo{color:var(--warn);}
 .vf-note{font-size:12px;padding:10px 12px;border-radius:8px;border:1px solid var(--warn);margin-bottom:10px;}
+/* v7.1.0 コンテナ写真 日時入れ */
+.ps-note{font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.7;}
+.ps-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;}
+.ps-iv{font-weight:700;font-size:13px;margin-right:6px;}
+.ps-red{color:var(--error);font-weight:700;font-size:13px;margin:6px 0;}
+.ps-msg{font-size:12px;color:var(--text2);margin:6px 0;white-space:pre-line;}
+.ps-wrap{overflow-x:auto;}
+.ps-tbl td{vertical-align:middle;}
+.ps-tbl tr:hover td{background:none;cursor:default;}
+.ps-tbl input[type="date"]{padding:4px 6px;}
+.ps-src{display:inline-block;margin-left:4px;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;}
+.ps-src.photo{background:rgba(34,197,94,.15);color:var(--ok);}
+.ps-src.jk{background:rgba(79,142,247,.15);color:var(--accent);}
+.ps-src.man{background:rgba(245,158,11,.15);color:var(--warn);}
+.ps-diff{color:var(--warn);font-size:11px;margin-top:3px;}
+.ps-sub{font-size:10px;color:var(--text3);}
+.ps-cmp{display:flex;gap:6px;}
+.ps-cmp figure{margin:0;}
+.ps-cmp img{width:170px;height:auto;background:#000;border-radius:4px;display:block;}
+.ps-cmp figcaption{font-size:10px;color:var(--text3);text-align:center;}
+.ps-ok{color:var(--ok);font-weight:700;}.ps-warn{color:var(--warn);font-weight:700;}.ps-bad{color:var(--error);font-weight:700;}
 </style>
 </head>
 <body>
@@ -304,6 +325,29 @@ input[type="date"]{color-scheme:dark;}
     </div>
   </div>
 
+  <div class="card" id="cardPs">
+    <div class="card-title"><span class="badge badge-step">別機能</span> 📷 コンテナ写真 日時入れ</div>
+    <div class="card-body">
+      <p class="ps-note">STEP 1 で選んだ I/V のコンテナ写真に 日付 · 時刻 を 右下 に入れます。元の写真は変えません。<br>
+        日付 = 写真の撮影日 → 実況表の作業日 → 担当者入力 · 時刻 = 写真の時刻 → 無ければ 12〜13 時の目安 · 保存先 = ▲ 書類作成中/{I/V}/_日時入り/</p>
+      <div class="ps-bar">
+        <span class="ps-iv" id="psIv">I/V: STEP 1 で選んでください</span>
+        <button class="btn btn-ghost" id="psFindBtn" onclick="psFind()">🔍 写真を探す</button>
+        <button class="btn btn-primary" id="psMakeBtn" onclick="psMake()" disabled>🕛 日時を入れる</button>
+        <button class="btn btn-ok" id="psSaveBtn" onclick="psSave(false)" disabled>💾 保存 (SharePoint + zip)</button>
+        <button class="btn btn-ghost" id="psRetryBtn" onclick="psSave(true)" style="display:none;">↻ 失敗分を再保存</button>
+      </div>
+      <div class="ps-red" id="psRed" style="display:none;">業者に作業日を確認して入力してください</div>
+      <div class="ps-msg" id="psMsg"></div>
+      <div class="ps-wrap" id="psTblWrap" style="display:none;">
+        <table class="tbl ps-tbl">
+          <thead><tr><th>CT番号</th><th>日付</th><th>時刻</th><th>枚数</th><th>確認 (元 / 後)</th><th>状態</th></tr></thead>
+          <tbody id="psBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
 </div><!-- /main -->
 <!-- ln-footer は LEENAI が挿入 -->
 </div><!-- /app -->
@@ -334,7 +378,10 @@ input[type="date"]{color-scheme:dark;}
      測定日 < 作業日 = OK · 同じ日 = 測定の時刻が その日の最後のコンテナ写真より前なら OK · それ以外 / 遅い = 確定時に 「このまま使いますか？」
    v7.0.7 (2026-11-22 形님): 作業日が分からない時は 「作業日（確認して入力）」 欄を出す · 担当者が確認して入力するまで 確定できない · 入力値で同じ確認
    v7.0.8 (2026-11-26 形님): CUT 後は IV フォルダが 「▲ 書類作成中」 へ移動する → RR 写真 (_RR) と 作業写真 を 2 か所とも探す
-     CUT 前 = PHOTO_V2/{IV}/_RR · {IV}/{CT}/   CUT 後 = ▲ 書類作成中/{IV}/_RR · {IV}/PHOTO/{CT}/ · 両方にあれば 合わせて表示 */
+     CUT 前 = PHOTO_V2/{IV}/_RR · {IV}/{CT}/   CUT 後 = ▲ 書類作成中/{IV}/_RR · {IV}/PHOTO/{CT}/ · 両方にあれば 合わせて表示
+   v7.1.0 (2026-11-27 形님): 別機能 「📷 コンテナ写真 日時入れ」 (画面の一番下) — STEP 1 の I/V のコンテナ写真に 日付 · 時刻 を右下に入れる ·
+     日付 = 写真 → 実況表 → 担当者入力 · 時刻 = 写真 → 同じ CT の近い写真 → 12〜13 時の目安 (IV · CT で決まる値) · 元の写真は読むだけ ·
+     保存 = ▲ 書類作成中/{IV}/_日時入り/{CT}/ (▲ の IV フォルダがある時だけ) + zip · RR 報告書の機能は変えない */
 
 /* ── 設定 (この 1 か所だけ) ── */
 const RR_CFG={
@@ -347,7 +394,8 @@ const RR_CFG={
   maxVal:0.3,             /* 写真 1 枚の測定値の上限 (μSv/h) */
   maxRatio:1.5,           /* 判定: 表面平均 / 背景平均 (b/a) の上限 */
   /* 担当者が確定した内容を RR_READ/_confirm/{日付}/ に記録 (D-02 エンジンの精度測定用 · D-02 専用フォルダ) */
-  confirmLog:true
+  confirmLog:true,
+  stampWin:{from:'12:00',to:'13:00'}   /* v7.1.0 コンテナ写真 日時入れ: 時刻の目安を並べる範囲 */
 };
 const GRAPH_BASE='https://graph.microsoft.com/v1.0/';
 
@@ -398,11 +446,11 @@ function startTool(){
 LEENAI.init({
   sys:'D-02',
   name:'放射線測定 報告書',
-  version:'7.0.8',
-  date:'2026-11-21',
+  version:'7.1.0',
+  date:'2026-11-27',
   desc:'COMPASS と SharePoint (PHOTO_V2) の写真から放射性物質簡易測定結果報告書を作成します',
   redirectUri:'https://mhlee205.github.io/RADIATION-REPORT/',
-  graphScopes:['Sites.ReadWrite.All'],   /* RR_READ/_confirm に確定の記録を書く (失敗しても出力には影響なし) */
+  graphScopes:['Sites.ReadWrite.All'],   /* RR_READ/_confirm に確定の記録を書く (失敗しても出力には影響なし) · v7.1.0 ▲ 書類作成中/{IV}/_日時入り */
   onReady:startTool,
 });
 
@@ -2069,6 +2117,403 @@ async function generateWord(){
     alert('Word生成エラー: '+e.message);
     console.error(e);
   }
+}
+
+// ══════════════════════════════════════════════════
+// v7.1.0 コンテナ写真 日時入れ (RR 報告書とは別の機能 · 元の写真は読むだけ)
+//   I/V = STEP 1 で選んだもの · 写真 = ivPlaces() の 2 か所 (loadWorkTimes と同じ選び方 · 同じ名前は 1 枚)
+//   日付 = ① 写真の撮影日 (EXIF · SharePoint) ② 実況表の作業日 ③ 担当者入力 · 時刻 = 写真の時刻 → 同じ CT の近い写真 → RR_CFG.stampWin の中に並べる (目安)
+//   保存 = ▲ 書類作成中/{IV}/_日時入り/{CT}/{元の名前} だけ (▲ の IV フォルダがある時だけ · 作らない) + zip
+//   写真に 「Powered by」 は書かない (画面 · 記録ファイルには書く)
+// ══════════════════════════════════════════════════
+const PS_CFG={
+  firstFrom:2,firstTo:8,   /* 最初の写真 = 開始 + この分 (2〜8 分) */
+  gapPhoto:[1,2],          /* 写真と写真の間 (分) */
+  gapCt:[3,6],             /* コンテナとコンテナの間 (分) */
+  quality:0.92,            /* JPEG 品質 */
+  simpleMax:4*1024*1024,   /* これより大きい写真は アップロードセッション */
+  chunk:320*1024*16,       /* アップロードセッションの 1 回分 (320 KiB の倍数) */
+  outDir:'_日時入り',
+  logName:'_stamp_log.json'
+};
+let PS={iv:'',cts:[],docOk:false,docPath:'',made:false,saved:false,failed:[],other:0,busy:false,msg:''};
+
+function psVer(){const m=String(document.title||'').match(/v(\d+\.\d+\.\d+)/);return m?m[1]:'';}
+function psRng(s){
+  let h=1779033703^s.length;
+  for(let i=0;i<s.length;i++){h=Math.imul(h^s.charCodeAt(i),3432918353);h=h<<13|h>>>19;}
+  let a=(h^(h>>>16))>>>0;
+  return function(){a=(a+0x6D2B79F5)|0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296;};
+}
+function psInt(r,a,b){return a+Math.floor(r()*(b-a+1));}
+function psMin(hm){const m=String(hm||'').match(/^(\d{1,2}):(\d{2})$/);return m?(+m[1])*60+(+m[2]):NaN;}
+function psHM(n){return String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0');}
+function psNorm(s){return String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');}
+function psByName(a,b){return a.name.localeCompare(b.name,undefined,{numeric:true});}
+function psDay(s){const d=String(s||'').slice(0,10);return /^(19|20)\d{2}-\d{2}-\d{2}$/.test(d)?d:'';}
+function psTaken(s){const t=normTaken(s||'');return psDay(t)?t:'';}
+function psLoadMsg(m){if(LEENAI.loading&&LEENAI.loading.update)LEENAI.loading.update(m);else showLoading(m);}
+function psSameIv(){
+  const cur=S.selectedIV&&S.selectedIV.ivNo;
+  if(PS.iv&&cur===PS.iv)return true;
+  alert('I/V が変わりました。もう一度 「写真を探す」 を押してください。');
+  return false;
+}
+
+/* 実況表 (C-01) の行 → { CT (英数字だけ): {date, no} } */
+async function psJikkyou(iv){
+  if(!jkCache)jkCache=await grJson(RR_CFG.jikkyouRel).catch(()=>null)||{ivs:[]};
+  const x=(jkCache.ivs||[]).find(v=>v.iv_no===iv);
+  const out={};
+  ((x&&x.rows)||[]).forEach(r=>{const k=psNorm(r.ct);if(k&&!out[k])out[k]={date:psDay(r.work_date),no:typeof r.no==='number'?r.no:null};});
+  return out;
+}
+
+/* ① 写真を探す */
+async function psFind(){
+  if(PS.busy)return;
+  const sel=S.selectedIV;
+  if(!sel||!sel.ivNo||sel.ivNo==='—'){alert('STEP 1 で I/V を選んでください。');return;}
+  const iv=sel.ivNo;
+  PS={iv,cts:[],docOk:false,docPath:'',made:false,saved:false,failed:[],other:0,busy:true,msg:''};
+  psRender();
+  showLoading('コンテナ写真を探しています...');
+  try{
+    /* 保存先 = ▲ 書類作成中/{IV} (あれば) — 無ければ作らない (zip のみ) */
+    PS.docPath=docRoot()?docRoot()+'/'+iv:'';
+    if(PS.docPath){
+      const r=await grFetch(grFullUrl(PS.docPath)+'?$select=id,name,folder');
+      if(r.ok){const j=await r.json();PS.docOk=!!j.folder;}
+      else if(r.status!==404)throw new Error('▲ 書類作成中 の確認に失敗 ('+r.status+')');
+    }
+    const map={};
+    for(const pl of ivPlaces(iv)){
+      const top=await grChildrenOfFull(pl.ctSub?pl.path+'/'+pl.ctSub:pl.path).catch(()=>null);
+      const cts=(top||[]).filter(x=>x.folder&&!/^_/.test(x.name)&&!['搬入票','RR','PHOTO','通関'].includes(x.name));
+      for(const c of cts){
+        const k=psNorm(c.name)||c.name;
+        const ct=map[k]||(map[k]={ct:c.name,files:[],seen:new Set(),other:new Set()});
+        const items=(await grChildrenOfItem(c.id))||[];
+        items.filter(x=>x.file).forEach(it=>{
+          if(!/\.jpe?g$/i.test(it.name)){if(/\.(png|heic|heif|gif|bmp|webp|tiff?)$/i.test(it.name))ct.other.add(it.name);return;}   /* jpg 以外の写真 = 対象外 (数だけ表示) */
+          if(ct.seen.has(it.name))return;          /* 2 か所に同じ写真 (C-01 が ▲ へ複製) → 1 枚 */
+          ct.seen.add(it.name);
+          ct.files.push({name:it.name,itemId:it.id,place:pl.label,spTaken:psTaken(it.photo&&it.photo.takenDateTime)});
+        });
+      }
+    }
+    const list=Object.values(map);
+    PS.other=list.reduce((n,c)=>n+c.other.size,0);
+    const all=[];
+    list.forEach(c=>{c.files.sort(psByName);c.files.forEach(f=>all.push(f));});
+    if(!all.length){hideLoading();PS.busy=false;PS.msg='コンテナ写真 (jpg) がありません。'+(PS.other?` (jpg 以外 ${PS.other} 件は対象外)`:'');psRender();return;}
+    let n=0;
+    await runPool(all,4,async f=>{
+      const b=await grBlob(f.itemId);
+      f.buf=await b.arrayBuffer();
+      f.size=f.buf.byteLength;
+      const e=psTaken(exifTaken(f.buf));
+      f.taken=e||f.spTaken||'';f.takenSrc=e?'exif':(f.spTaken?'sharepoint':'');
+      n++;psLoadMsg(`写真を読み込み中 ${n}/${all.length}`);
+    });
+    const jk=await psJikkyou(iv);
+    PS.cts=list.filter(c=>c.files.length).map(c=>{const j=jk[psNorm(c.ct)]||{};return {ct:c.ct,files:c.files,jkDate:j.date||'',jkNo:j.no==null?null:j.no,edit:''};});
+    PS.cts.sort((a,b)=>{
+      if(a.jkNo!=null&&b.jkNo!=null&&a.jkNo!==b.jkNo)return a.jkNo-b.jkNo;
+      if((a.jkNo!=null)!==(b.jkNo!=null))return a.jkNo!=null?-1:1;
+      return a.ct.localeCompare(b.ct,undefined,{numeric:true});
+    });
+    PS.cts.forEach(psDecideDate);
+    psAssignTimes();
+    hideLoading();
+    PS.busy=false;
+    PS.msg=`コンテナ ${PS.cts.length} 台 · 写真 ${all.length} 枚`+(PS.other?` · jpg 以外 ${PS.other} 件は対象外`:'')+
+      (PS.docOk?'':'\n⚠ ▲ 書類作成中 にこの I/V のフォルダがありません — SharePoint には保存しません (zip のみ)');
+    psRender();
+  }catch(e){hideLoading();PS.busy=false;PS.msg='エラー: '+e.message;psRender();alert('写真の検索エラー: '+e.message);}
+}
+
+/* 日付 (コンテナごと): ① 写真の撮影日 (一番多い日) ② 実況表の作業日 ③ 担当者入力 */
+function psDecideDate(c){
+  const cnt={};
+  c.files.forEach(f=>{const d=psDay(f.taken);if(d)cnt[d]=(cnt[d]||0)+1;});
+  const ds=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]||(a<b?-1:1));
+  c.photoDate=ds[0]||'';c.photoDates=ds;c.mixed=ds.length>1;
+  c.autoDate=c.photoDate||c.jkDate||'';
+  c.autoSrc=c.photoDate?'写真':(c.jkDate?'実況表':'');
+  c.date=c.edit||c.autoDate;
+  c.dateSrc=c.edit?'担当者入力':c.autoSrc;
+  c.diff=!!(c.photoDate&&c.jkDate&&c.photoDate!==c.jkDate);
+}
+/* 写真 1 枚の日付: 担当者が直した → その日 · 写真に日付 → その日 (混在でも自分の日) · 無い → コンテナの日付 */
+function psPhotoDate(c,f){
+  if(c.edit)return {d:c.edit,src:'担当者'};
+  const d=psDay(f.taken);
+  if(d)return {d,src:'写真'};
+  return {d:c.date,src:c.dateSrc==='写真'?'写真(同じCT)':(c.dateSrc==='実況表'?'実況表':'')};
+}
+/* 時刻: ① 写真の本当の時刻 ② 同じ CT でファイル順が一番近い写真の時刻 ③ stampWin の中に並べる (IV · CT で決まる値 = 何度でも同じ) */
+function psAssignTimes(){
+  const from=psMin(RR_CFG.stampWin.from),to=psMin(RR_CFG.stampWin.to),span=to-from;
+  const pend={};
+  PS.cts.forEach(c=>{
+    const fs=c.files;
+    fs.forEach(f=>{
+      const pd=psPhotoDate(c,f);
+      f.date=pd.d;f.dateSrc=pd.src;f.time='';f.timeSrc='';
+      const own=psTaken(f.taken);
+      if(f.date&&own.length>=16&&own.slice(0,10)===f.date){f.time=own.slice(11,16);f.timeSrc='写真';}
+    });
+    fs.forEach((f,i)=>{
+      if(f.time||!f.date)return;
+      for(let k=1;k<fs.length;k++){
+        for(const j of [i-k,i+k]){
+          const g=fs[j];
+          if(g&&g.timeSrc==='写真'&&g.date===f.date){f.time=g.time;f.timeSrc='同じCT';return;}
+        }
+      }
+    });
+    fs.filter(f=>f.date&&!f.time).forEach(f=>{const p=pend[f.date]=pend[f.date]||{};(p[c.ct]=p[c.ct]||[]).push(f);});
+  });
+  PS.crowded=0;
+  Object.keys(pend).forEach(d=>{
+    const groups=PS.cts.filter(c=>pend[d][c.ct]).map(c=>({c,fs:pend[d][c.ct]}));
+    const start=psInt(psRng(PS.iv+'|'+d),PS_CFG.firstFrom,PS_CFG.firstTo);
+    const gaps=[],flat=[];
+    groups.forEach((g,gi)=>{
+      const r=psRng(PS.iv+'|'+g.c.ct);
+      const ctGap=psInt(r,PS_CFG.gapCt[0],PS_CFG.gapCt[1]);
+      g.fs.forEach((f,i)=>{
+        gaps.push(i===0?(gi===0?0:ctGap):psInt(r,PS_CFG.gapPhoto[0],PS_CFG.gapPhoto[1]));
+        flat.push(f);
+      });
+    });
+    const total=gaps.reduce((s,x)=>s+x,0);
+    /* 終わりの時刻を越える時は 間を縮める · 同じ分は 2 枚まで (それでも入らない時だけ 開始を早める → 3 枚以上) */
+    const place=(st,cap)=>{
+      const k=(total&&st+total>span)?(span-st)/total:1,ms=[];let cum=0,prev=-1,cnt=0;
+      gaps.forEach(g=>{cum+=g;let m=Math.floor(st+cum*k+1e-9);if(m<prev)m=prev;if(m===prev&&cnt>=cap)m=prev+1;cnt=(m===prev)?cnt+1:1;prev=m;ms.push(m);});
+      return ms;
+    };
+    let ms=place(start,2);
+    if(ms[ms.length-1]>span)ms=place(PS_CFG.firstFrom,2);
+    if(ms[ms.length-1]>span)ms=place(0,2);
+    if(ms[ms.length-1]>span){ms=place(0,Infinity);PS.crowded+=flat.length;}
+    flat.forEach((f,i)=>{f.time=psHM(from+Math.min(span,ms[i]));f.timeSrc='目安';});
+  });
+}
+
+function psSetDate(i,v){
+  const c=PS.cts[i];if(!c)return;
+  v=psDay(v);
+  c.edit=(v&&v!==c.autoDate)?v:'';
+  psDecideDate(c);
+  psAssignTimes();
+  PS.made=false;PS.saved=false;PS.failed=[];
+  PS.cts.forEach(x=>x.files.forEach(f=>{f.out=null;}));
+  psRender();
+}
+
+/* 右下などに 撮影日時の帯 (LABEL_STYLE と同じ形 · drawLabel は報告書用なので別の関数) */
+function drawLabelAt(ctx,w,h,label,pos){
+  const fs=Math.max(14,Math.round(w*LABEL_STYLE.size));
+  ctx.font=LABEL_STYLE.font.replace('{px}',fs);
+  const pad=Math.round(fs*0.4),m=Math.round(fs*0.4),tw=ctx.measureText(label).width;
+  const bw=tw+pad*2,bh=fs+pad*2;
+  const x=(pos==='br'||pos==='tr')?w-m-bw:m;
+  const y=(pos==='br'||pos==='bl')?h-m-bh:m;
+  ctx.fillStyle=LABEL_STYLE.bg;ctx.fillRect(x,y,bw,bh);
+  ctx.fillStyle=LABEL_STYLE.fg;ctx.fillText(label,x+pad,y+pad+fs*0.85);
+}
+function psImgEl(blob){
+  return new Promise((res,rej)=>{const u=URL.createObjectURL(blob);const im=new Image();
+    im.onload=()=>{URL.revokeObjectURL(u);res(im);};im.onerror=()=>{URL.revokeObjectURL(u);rej(new Error('写真を開けません'));};im.src=u;});
+}
+/* 右下の拡大 (確認用 · 右 70% · 下 22%) */
+function psCrop(cv,w,h){
+  const sw=Math.round(w*0.7),sh=Math.round(h*0.22),c=document.createElement('canvas');
+  c.width=320;c.height=Math.max(1,Math.round(320*sh/sw));
+  c.getContext('2d').drawImage(cv,w-sw,h-sh,sw,sh,0,0,c.width,c.height);
+  return c.toDataURL('image/jpeg',0.8);
+}
+/* 写真 1 枚 → 日時入り JPEG (元の大きさ · 画面に見える向き (EXIF の向きを反映) · 回さない) */
+async function psStampOne(f,withCrop){
+  const blob=new Blob([f.buf],{type:'image/jpeg'});
+  let src=null;
+  try{src=await createImageBitmap(blob,{imageOrientation:'from-image'});}catch(e){src=await psImgEl(blob);}
+  const w=src.naturalWidth||src.width,h=src.naturalHeight||src.height;
+  const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+  const x=cv.getContext('2d');x.drawImage(src,0,0,w,h);
+  if(src.close)src.close();
+  const r={w,h};
+  if(withCrop)r.before=psCrop(cv,w,h);
+  drawLabelAt(x,w,h,f.date+' '+f.time,'br');
+  if(withCrop)r.after=psCrop(cv,w,h);
+  r.blob=await new Promise((res,rej)=>cv.toBlob(b=>b?res(b):rej(new Error('JPEG に変換できません')),'image/jpeg',PS_CFG.quality));
+  cv.width=cv.height=0;
+  return r;
+}
+
+/* ② 日時を入れる (プレビュー) */
+async function psMake(){
+  if(PS.busy||!PS.cts.length||!psSameIv())return;
+  if(PS.cts.some(c=>!c.date)){psRender();return;}
+  PS.busy=true;psRender();
+  showLoading('日時を入れています...');
+  try{
+    psAssignTimes();
+    const all=[];PS.cts.forEach(c=>c.files.forEach((f,i)=>all.push({c,f,i})));
+    let n=0;
+    for(const a of all){
+      const r=await psStampOne(a.f,a.i===0);
+      a.f.out=r.blob;
+      if(a.i===0){a.c.before=r.before;a.c.after=r.after;}
+      n++;psLoadMsg(`日時を入れています ${n}/${all.length}`);
+    }
+    PS.made=true;PS.saved=false;PS.failed=[];
+    PS.msg=`日時を入れました ${all.length} 枚 — 「確認」 の 元 と 後 を見比べてから保存してください。`+
+      (PS.crowded?`\n⚠ 写真が多く ${RR_CFG.stampWin.from}〜${RR_CFG.stampWin.to} に 同じ分が 3 枚以上あります (${PS.crowded} 枚)`:'');
+  }catch(e){PS.msg='エラー: '+e.message;alert('日時入れエラー: '+e.message);}
+  hideLoading();PS.busy=false;psRender();
+}
+
+/* 保存先の門番: ▲ 書類作成中/{IV}/_日時入り/ の中だけ (元の写真の場所には書かない) */
+function psGuard(path){
+  const base=docRoot()+'/'+PS.iv+'/'+PS_CFG.outDir+'/';
+  if(!PS.docOk||!docRoot()||String(path).indexOf(base)!==0||String(path).split('/').some(s=>s===''||s==='.'||s==='..'))
+    throw new Error('保存先が _日時入り の外です');
+}
+function psOutPath(ct,name){const p=PS.docPath+'/'+PS_CFG.outDir+'/'+ct+'/'+name;psGuard(p);return p;}
+async function psPut(path,blob,type){
+  psGuard(path);
+  if(blob.size<=PS_CFG.simpleMax){
+    const r=await grFetch(grFullUrl(path)+'/content?@microsoft.graph.conflictBehavior=replace',{method:'PUT',headers:{'Content-Type':type},body:blob});
+    if(!r.ok)throw new Error('PUT '+r.status);
+    return;
+  }
+  const r=await grFetch(grFullUrl(path)+'/createUploadSession',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({item:{'@microsoft.graph.conflictBehavior':'replace'}})});
+  if(!r.ok)throw new Error('アップロードセッション '+r.status);
+  const up=(await r.json()).uploadUrl,n=blob.size;
+  for(let s=0;s<n;s+=PS_CFG.chunk){
+    const e=Math.min(n,s+PS_CFG.chunk);
+    const rr=await fetch(up,{method:'PUT',headers:{'Content-Range':`bytes ${s}-${e-1}/${n}`},body:blob.slice(s,e)});
+    if(!rr.ok)throw new Error('アップロード '+rr.status);
+  }
+}
+function psLogRec(){
+  const photos=[];
+  PS.cts.forEach(c=>c.files.forEach(f=>photos.push({ct:c.ct,file:f.name,from:f.place,date:f.date,time:f.time,date_src:f.dateSrc,time_src:f.timeSrc,
+    taken:f.taken||'',taken_src:f.takenSrc||'',size:f.out?f.out.size:null})));
+  return {
+    powered:'✦ Powered by LEENAI Automation System',
+    type:'container_photo_stamp',tool:'D-02 RADIATION-REPORT v'+psVer(),at:new Date().toISOString(),by:(LEENAI.user&&LEENAI.user.email)||'',
+    iv_no:PS.iv,saved_to:PS.docOk?PS.docPath+'/'+PS_CFG.outDir:'',position:'右下',window:RR_CFG.stampWin,
+    containers:PS.cts.map(c=>({ct:c.ct,date:c.date,date_src:c.dateSrc,photo_date:c.photoDate,photo_dates:c.photoDates,jikkyou_date:c.jkDate,edited:!!c.edit,auto_date:c.autoDate,auto_src:c.autoSrc,photos:c.files.length})),
+    edits:PS.cts.filter(c=>c.edit).map(c=>({ct:c.ct,from:c.autoDate,from_src:c.autoSrc,to:c.edit})),
+    photos,failed:PS.failed.map(x=>x.log?PS_CFG.logName:x.c.ct+'/'+x.f.name)
+  };
+}
+/* zip (無圧縮 · ファイル名 UTF-8) — makeZipStore と同じ形 + UTF-8 の印 · 大きい写真でも 1 つにつなげない (Blob) */
+function psZip(files){
+  const T=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?(0xEDB88320^(c>>>1)):(c>>>1);T[n]=c>>>0;}
+  const crc32=d=>{let c=0xFFFFFFFF;for(let i=0;i<d.length;i++)c=T[(c^d[i])&0xFF]^(c>>>8);return(c^0xFFFFFFFF)>>>0;};
+  const u16=n=>new Uint8Array([n&0xFF,(n>>8)&0xFF]);
+  const u32=n=>new Uint8Array([n&0xFF,(n>>>8)&0xFF,(n>>>16)&0xFF,(n>>>24)&0xFF]);
+  const parts=[],cds=[];let off=0;
+  for(const [name,data] of files){
+    const nb=new TextEncoder().encode(name),crc=crc32(data),sz=data.length;
+    const lh=[new Uint8Array([0x50,0x4B,0x03,0x04]),u16(20),u16(0x0800),u16(0),u16(0),u16(0),u32(crc),u32(sz),u32(sz),u16(nb.length),u16(0),nb];
+    const lhLen=lh.reduce((s,x)=>s+x.length,0);
+    parts.push(...lh,data);
+    cds.push(new Uint8Array([0x50,0x4B,0x01,0x02]),u16(20),u16(20),u16(0x0800),u16(0),u16(0),u16(0),u32(crc),u32(sz),u32(sz),u16(nb.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(off),nb);
+    off+=lhLen+sz;
+  }
+  const cdLen=cds.reduce((s,x)=>s+x.length,0);
+  return new Blob([...parts,...cds,new Uint8Array([0x50,0x4B,0x05,0x06]),u16(0),u16(0),u16(files.length),u16(files.length),u32(cdLen),u32(off),u16(0)],{type:'application/zip'});
+}
+async function psDownloadZip(){
+  const files=[];
+  for(const c of PS.cts)for(const f of c.files)files.push([c.ct+'/'+f.name,new Uint8Array(await f.out.arrayBuffer())]);
+  const blob=psZip(files);
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=`${PS.iv}_日時入り.zip`;a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+
+/* ③ 保存 (SharePoint + zip) · onlyFailed = 失敗した分だけもう一度 */
+async function psSave(onlyFailed){
+  if(PS.busy||!PS.made||!psSameIv())return;
+  if(PS.cts.some(c=>!c.date))return;
+  const total=PS.cts.reduce((n,c)=>n+c.files.length,0);
+  if(!onlyFailed){
+    const q=PS.docOk?`${total} 枚を SharePoint に保存し、zip をダウンロードします。\n保存先: ▲ 書類作成中/${PS.iv}/${PS_CFG.outDir}/\n(元の写真は変えません · 同じ名前は上書き)`
+                    :`▲ 書類作成中 にこの I/V のフォルダがないため、zip のダウンロードだけ行います。`;
+    if(!confirm(q))return;
+  }
+  PS.busy=true;psRender();
+  showLoading('保存しています...');
+  try{
+    if(PS.docOk){
+      const todo=onlyFailed?PS.failed.filter(x=>!x.log):[];
+      if(!onlyFailed)PS.cts.forEach(c=>c.files.forEach(f=>todo.push({c,f})));
+      const fail=[];let n=0;
+      await runPool(todo,3,async x=>{
+        try{await psPut(psOutPath(x.c.ct,x.f.name),x.f.out,'image/jpeg');}
+        catch(e){fail.push({c:x.c,f:x.f,why:e.message});}
+        n++;psLoadMsg(`SharePoint に保存中 ${n}/${todo.length}`);
+      });
+      PS.failed=fail;
+      try{
+        const rec=psLogRec();
+        const txt=JSON.stringify(rec,null,1).replace(/^\{\n\s*/,'{')+'\n';
+        await psPut(PS.docPath+'/'+PS_CFG.outDir+'/'+PS_CFG.logName,new Blob([txt],{type:'application/json'}),'application/json');
+      }catch(e){PS.failed.push({log:true,why:e.message});}
+    }
+    if(!onlyFailed){psLoadMsg('zip を作っています...');await psDownloadZip();}
+    PS.saved=true;
+    const ok=PS.failed.length===0;
+    PS.msg=(PS.docOk?(ok?`✓ SharePoint に保存しました (${total} 枚 · ${PS_CFG.logName})`:`⚠ 保存に失敗: ${PS.failed.length} 件 — 「失敗分を再保存」 を押してください\n`+
+      PS.failed.map(x=>(x.log?PS_CFG.logName:x.c.ct+'/'+x.f.name)+' ('+x.why+')').join('\n')):'SharePoint 保存なし (▲ の I/V フォルダなし)')+
+      (onlyFailed?'':`\nzip: ${PS.iv}_日時入り.zip`);
+  }catch(e){PS.msg='エラー: '+e.message;alert('保存エラー: '+e.message);}
+  hideLoading();PS.busy=false;psRender();
+}
+
+function psRender(){
+  const ivEl=document.getElementById('psIv');if(!ivEl)return;
+  ivEl.textContent=PS.iv?('I/V: '+PS.iv):'I/V: STEP 1 で選んでください';
+  const miss=PS.cts.some(c=>!c.date);
+  document.getElementById('psRed').style.display=miss?'block':'none';
+  document.getElementById('psMsg').textContent=PS.msg||'';
+  document.getElementById('psFindBtn').disabled=PS.busy;
+  document.getElementById('psMakeBtn').disabled=PS.busy||!PS.cts.length||miss;
+  const sb=document.getElementById('psSaveBtn');
+  sb.disabled=PS.busy||!PS.made||miss;
+  sb.textContent=(PS.cts.length&&!PS.docOk)?'💾 zip ダウンロード (SharePoint 保存なし)':'💾 保存 (SharePoint + zip)';
+  const rb=document.getElementById('psRetryBtn');
+  rb.style.display=(PS.saved&&PS.failed.length)?'inline-block':'none';rb.disabled=PS.busy;
+  document.getElementById('psTblWrap').style.display=PS.cts.length?'block':'none';
+  const tb=document.getElementById('psBody');
+  tb.innerHTML=PS.cts.map((c,i)=>{
+    const srcCls=c.dateSrc==='写真'?'photo':(c.dateSrc==='実況表'?'jk':'man');
+    const ts=c.files.map(f=>f.time).filter(Boolean).sort();
+    const real=c.files.filter(f=>f.timeSrc==='写真').length;
+    const st=!c.date?'<span class="ps-bad">⚠ 日付なし</span>':(c.diff||c.mixed)?`<span class="ps-warn">⚠ ${c.mixed?'日付が混在':'日付が違う'}</span>`:'<span class="ps-ok">✓</span>';
+    const notes=[];
+    if(c.diff)notes.push(`写真 ${c.photoDate} / 実況表 ${c.jkDate}`);
+    if(c.mixed)notes.push(`写真の日付: ${c.photoDates.join(' · ')} (写真ごとに自分の日付)`);
+    if(c.edit)notes.push(`自動: ${c.autoDate||'なし'}${c.autoSrc?' ('+c.autoSrc+')':''}`);
+    return `<tr>
+      <td><strong>${esc(c.ct)}</strong></td>
+      <td><input type="date" value="${esc(c.date)}" onchange="psSetDate(${i},this.value)"${PS.busy?' disabled':''}>
+        ${c.dateSrc?`<span class="ps-src ${srcCls}">${esc(c.dateSrc)}</span>`:''}
+        ${notes.map(t=>`<div class="ps-diff">${esc(t)}</div>`).join('')}</td>
+      <td>${ts.length?esc(ts[0]+(ts[ts.length-1]!==ts[0]?'〜'+ts[ts.length-1]:'')):'—'}<div class="ps-sub">実時刻 ${real}/${c.files.length} 枚</div></td>
+      <td>${c.files.length}</td>
+      <td>${PS.made&&c.before?`<div class="ps-cmp"><figure><img src="${c.before}" alt=""><figcaption>元 (右下)</figcaption></figure><figure><img src="${c.after}" alt=""><figcaption>後 (右下)</figcaption></figure></div>`:'<span class="ps-sub">「日時を入れる」 の後に表示</span>'}</td>
+      <td>${st}</td></tr>`;
+  }).join('');
 }
 
 // LEENAI が認証コールバックを処理するため window.onload の handleCallback は不要
