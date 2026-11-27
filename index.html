@@ -383,7 +383,8 @@ input[type="date"]{color-scheme:dark;}
      日付 = 写真 → 実況表 → 担当者入力 · 時刻 = 写真 → 同じ CT の近い写真 → 12〜13 時の目安 (IV · CT で決まる値) · 元の写真は読むだけ ·
      保存 = ▲ 書類作成中/{IV}/_日時入り/{CT}/ (▲ の IV フォルダがある時だけ) + zip · RR 報告書の機能は変えない
    v7.1.1 (2026-11-27 形님): コンテナ写真 日時入れ の時刻 = 写真に本当の時刻があっても すべて 12〜13 時 (RR_CFG.stampWin) の目安 · 日付の決め方は同じ · RR 報告書は変えない
-   v7.1.2 (2026-11-27 形님): 一覧の RR写真 = _kinds.json が 2 か所とも無い時も _RR の写真を数える (「N枚 · 未分類」 · 写真が無い時だけ 「なし」) */
+   v7.1.2 (2026-11-27 形님): 一覧の RR写真 = _kinds.json が 2 か所とも無い時も _RR の写真を数える (「N枚 · 未分類」 · 写真が無い時だけ 「なし」)
+   v7.1.3 (2026-11-27 形님): コンテナ写真 日時入れ の文字 = 縦横とも半分 (PS_CFG.labelSize = 0.065/2 · 面積 1/4) · RR 報告書の LABEL_STYLE · drawLabel は変えない */
 
 /* ── 設定 (この 1 か所だけ) ── */
 const RR_CFG={
@@ -448,7 +449,7 @@ function startTool(){
 LEENAI.init({
   sys:'D-02',
   name:'放射線測定 報告書',
-  version:'7.1.2',
+  version:'7.1.3',
   date:'2026-11-27',
   desc:'COMPASS と SharePoint (PHOTO_V2) の写真から放射性物質簡易測定結果報告書を作成します',
   redirectUri:'https://mhlee205.github.io/RADIATION-REPORT/',
@@ -2148,6 +2149,7 @@ const PS_CFG={
   gapPhoto:[1,2],          /* 写真と写真の間 (分) */
   gapCt:[3,6],             /* コンテナとコンテナの間 (分) */
   quality:0.92,            /* JPEG 品質 */
+  labelSize:0.065/2,       /* v7.1.3 日時の文字 = 写真の幅のこの割合 (RR 報告書 LABEL_STYLE.size の半分 · 帯は 縦横とも半分) */
   simpleMax:4*1024*1024,   /* これより大きい写真は アップロードセッション */
   chunk:320*1024*16,       /* アップロードセッションの 1 回分 (320 KiB の倍数) */
   outDir:'_日時入り',
@@ -2319,9 +2321,9 @@ function psSetDate(i,v){
   psRender();
 }
 
-/* 右下などに 撮影日時の帯 (LABEL_STYLE と同じ形 · drawLabel は報告書用なので別の関数) */
+/* 右下などに 撮影日時の帯 (LABEL_STYLE と同じ色 · 形 · 大きさは PS_CFG.labelSize · drawLabel は報告書用なので別の関数) */
 function drawLabelAt(ctx,w,h,label,pos){
-  const fs=Math.max(14,Math.round(w*LABEL_STYLE.size));
+  const fs=Math.max(14,Math.round(w*PS_CFG.labelSize));
   ctx.font=LABEL_STYLE.font.replace('{px}',fs);
   const pad=Math.round(fs*0.4),m=Math.round(fs*0.4),tw=ctx.measureText(label).width;
   const bw=tw+pad*2,bh=fs+pad*2;
