@@ -329,7 +329,7 @@ input[type="date"]{color-scheme:dark;}
     <div class="card-title"><span class="badge badge-step">別機能</span> 📷 コンテナ写真 日時入れ</div>
     <div class="card-body">
       <p class="ps-note">STEP 1 で選んだ I/V のコンテナ写真に 日付 · 時刻 を 右下 に入れます。元の写真は変えません。<br>
-        日付 = 写真の撮影日 → 実況表の作業日 → 担当者入力 · 時刻 = 写真の時刻 → 無ければ 12〜13 時の目安 · 保存先 = ▲ 書類作成中/{I/V}/_日時入り/</p>
+        日付 = 写真の撮影日 → 実況表の作業日 → 担当者入力 · 時刻 = 12〜13 時の目安 (写真の時刻は使わない) · 保存先 = ▲ 書類作成中/{I/V}/_日時入り/</p>
       <div class="ps-bar">
         <span class="ps-iv" id="psIv">I/V: STEP 1 で選んでください</span>
         <button class="btn btn-ghost" id="psFindBtn" onclick="psFind()">🔍 写真を探す</button>
@@ -381,7 +381,8 @@ input[type="date"]{color-scheme:dark;}
      CUT 前 = PHOTO_V2/{IV}/_RR · {IV}/{CT}/   CUT 後 = ▲ 書類作成中/{IV}/_RR · {IV}/PHOTO/{CT}/ · 両方にあれば 合わせて表示
    v7.1.0 (2026-11-27 形님): 別機能 「📷 コンテナ写真 日時入れ」 (画面の一番下) — STEP 1 の I/V のコンテナ写真に 日付 · 時刻 を右下に入れる ·
      日付 = 写真 → 実況表 → 担当者入力 · 時刻 = 写真 → 同じ CT の近い写真 → 12〜13 時の目安 (IV · CT で決まる値) · 元の写真は読むだけ ·
-     保存 = ▲ 書類作成中/{IV}/_日時入り/{CT}/ (▲ の IV フォルダがある時だけ) + zip · RR 報告書の機能は変えない */
+     保存 = ▲ 書類作成中/{IV}/_日時入り/{CT}/ (▲ の IV フォルダがある時だけ) + zip · RR 報告書の機能は変えない
+   v7.1.1 (2026-11-27 形님): コンテナ写真 日時入れ の時刻 = 写真に本当の時刻があっても すべて 12〜13 時 (RR_CFG.stampWin) の目安 · 日付の決め方は同じ · RR 報告書は変えない */
 
 /* ── 設定 (この 1 か所だけ) ── */
 const RR_CFG={
@@ -446,7 +447,7 @@ function startTool(){
 LEENAI.init({
   sys:'D-02',
   name:'放射線測定 報告書',
-  version:'7.1.0',
+  version:'7.1.1',
   date:'2026-11-27',
   desc:'COMPASS と SharePoint (PHOTO_V2) の写真から放射性物質簡易測定結果報告書を作成します',
   redirectUri:'https://mhlee205.github.io/RADIATION-REPORT/',
@@ -2122,7 +2123,7 @@ async function generateWord(){
 // ══════════════════════════════════════════════════
 // v7.1.0 コンテナ写真 日時入れ (RR 報告書とは別の機能 · 元の写真は読むだけ)
 //   I/V = STEP 1 で選んだもの · 写真 = ivPlaces() の 2 か所 (loadWorkTimes と同じ選び方 · 同じ名前は 1 枚)
-//   日付 = ① 写真の撮影日 (EXIF · SharePoint) ② 実況表の作業日 ③ 担当者入力 · 時刻 = 写真の時刻 → 同じ CT の近い写真 → RR_CFG.stampWin の中に並べる (目安)
+//   日付 = ① 写真の撮影日 (EXIF · SharePoint) ② 実況表の作業日 ③ 担当者入力 · 時刻 = すべて RR_CFG.stampWin の中に並べる (目安 · v7.1.1 から写真の時刻は使わない)
 //   保存 = ▲ 書類作成中/{IV}/_日時入り/{CT}/{元の名前} だけ (▲ の IV フォルダがある時だけ · 作らない) + zip
 //   写真に 「Powered by」 は書かない (画面 · 記録ファイルには書く)
 // ══════════════════════════════════════════════════
@@ -2252,28 +2253,16 @@ function psPhotoDate(c,f){
   if(d)return {d,src:'写真'};
   return {d:c.date,src:c.dateSrc==='写真'?'写真(同じCT)':(c.dateSrc==='実況表'?'実況表':'')};
 }
-/* 時刻: ① 写真の本当の時刻 ② 同じ CT でファイル順が一番近い写真の時刻 ③ stampWin の中に並べる (IV · CT で決まる値 = 何度でも同じ) */
+/* 時刻 (v7.1.1 形님): 写真に本当の時刻があっても使わない — 日付が決まった写真は すべて stampWin の中に並べる (IV · CT で決まる値 = 何度でも同じ) */
 function psAssignTimes(){
   const from=psMin(RR_CFG.stampWin.from),to=psMin(RR_CFG.stampWin.to),span=to-from;
   const pend={};
   PS.cts.forEach(c=>{
-    const fs=c.files;
-    fs.forEach(f=>{
+    c.files.forEach(f=>{
       const pd=psPhotoDate(c,f);
       f.date=pd.d;f.dateSrc=pd.src;f.time='';f.timeSrc='';
-      const own=psTaken(f.taken);
-      if(f.date&&own.length>=16&&own.slice(0,10)===f.date){f.time=own.slice(11,16);f.timeSrc='写真';}
+      if(f.date){const p=pend[f.date]=pend[f.date]||{};(p[c.ct]=p[c.ct]||[]).push(f);}
     });
-    fs.forEach((f,i)=>{
-      if(f.time||!f.date)return;
-      for(let k=1;k<fs.length;k++){
-        for(const j of [i-k,i+k]){
-          const g=fs[j];
-          if(g&&g.timeSrc==='写真'&&g.date===f.date){f.time=g.time;f.timeSrc='同じCT';return;}
-        }
-      }
-    });
-    fs.filter(f=>f.date&&!f.time).forEach(f=>{const p=pend[f.date]=pend[f.date]||{};(p[c.ct]=p[c.ct]||[]).push(f);});
   });
   PS.crowded=0;
   Object.keys(pend).forEach(d=>{
@@ -2498,7 +2487,6 @@ function psRender(){
   tb.innerHTML=PS.cts.map((c,i)=>{
     const srcCls=c.dateSrc==='写真'?'photo':(c.dateSrc==='実況表'?'jk':'man');
     const ts=c.files.map(f=>f.time).filter(Boolean).sort();
-    const real=c.files.filter(f=>f.timeSrc==='写真').length;
     const st=!c.date?'<span class="ps-bad">⚠ 日付なし</span>':(c.diff||c.mixed)?`<span class="ps-warn">⚠ ${c.mixed?'日付が混在':'日付が違う'}</span>`:'<span class="ps-ok">✓</span>';
     const notes=[];
     if(c.diff)notes.push(`写真 ${c.photoDate} / 実況表 ${c.jkDate}`);
@@ -2509,7 +2497,7 @@ function psRender(){
       <td><input type="date" value="${esc(c.date)}" onchange="psSetDate(${i},this.value)"${PS.busy?' disabled':''}>
         ${c.dateSrc?`<span class="ps-src ${srcCls}">${esc(c.dateSrc)}</span>`:''}
         ${notes.map(t=>`<div class="ps-diff">${esc(t)}</div>`).join('')}</td>
-      <td>${ts.length?esc(ts[0]+(ts[ts.length-1]!==ts[0]?'〜'+ts[ts.length-1]:'')):'—'}<div class="ps-sub">実時刻 ${real}/${c.files.length} 枚</div></td>
+      <td>${ts.length?esc(ts[0]+(ts[ts.length-1]!==ts[0]?'〜'+ts[ts.length-1]:'')):'—'}<div class="ps-sub">${esc(RR_CFG.stampWin.from)}〜${esc(RR_CFG.stampWin.to)} の目安</div></td>
       <td>${c.files.length}</td>
       <td>${PS.made&&c.before?`<div class="ps-cmp"><figure><img src="${c.before}" alt=""><figcaption>元 (右下)</figcaption></figure><figure><img src="${c.after}" alt=""><figcaption>後 (右下)</figcaption></figure></div>`:'<span class="ps-sub">「日時を入れる」 の後に表示</span>'}</td>
       <td>${st}</td></tr>`;
